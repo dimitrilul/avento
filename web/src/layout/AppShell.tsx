@@ -68,7 +68,17 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
         component={NavLink}
         to="/profil"
         onClick={onNavigate}
-        sx={{ alignSelf: 'flex-start', width: 'fit-content', maxWidth: '100%', borderRadius: 3, p: 1, flex: '0 0 auto', minHeight: 56, maxHeight: 64 }}
+        sx={{
+          alignSelf: 'flex-start',
+          width: 'fit-content',
+          maxWidth: '100%',
+          height: 56,
+          minHeight: 56,
+          maxHeight: 56,
+          flex: 'none',
+          borderRadius: 3,
+          p: 1,
+        }}
       >
         <Avatar sx={{ width: 38, height: 38, bgcolor: 'secondary.light', color: 'secondary.dark', fontWeight: 800 }}>
           {profile?.display_name?.charAt(0).toUpperCase() || <PersonRoundedIcon />}
