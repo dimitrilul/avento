@@ -17,11 +17,20 @@ export type TrackMapSelection = {
   endIndex: number
 }
 
+export type TrackMapMarker = {
+  id: string
+  latitude: number
+  longitude: number
+  label?: string | null
+  color?: string
+}
+
 type TrackMapProps = {
   points: TrackPoint[]
   activePointIndex?: number | null
   selectedRange?: TrackMapSelection | null
   showKilometerMarkers?: boolean
+  markers?: TrackMapMarker[]
   onPointHover?: (sourceIndex: number) => void
   height?: { xs: number; md: number } | number
 }
@@ -79,6 +88,7 @@ export function TrackMap({
   activePointIndex = null,
   selectedRange = null,
   showKilometerMarkers = false,
+  markers = [],
   onPointHover,
   height = { xs: 340, md: 440 },
 }: TrackMapProps) {
@@ -87,6 +97,7 @@ export function TrackMap({
   const activeMarkerRef = useRef<maplibregl.Marker | null>(null)
   const selectionMarkersRef = useRef<maplibregl.Marker[]>([])
   const kilometerMarkersRef = useRef<maplibregl.Marker[]>([])
+  const extraMarkersRef = useRef<maplibregl.Marker[]>([])
   const hoverCallbackRef = useRef(onPointHover)
   const [mapReady, setMapReady] = useState(false)
   const entries = useMemo(() => coordinateEntries(points), [points])
@@ -186,6 +197,8 @@ export function TrackMap({
       selectionMarkersRef.current = []
       kilometerMarkersRef.current.forEach((marker) => marker.remove())
       kilometerMarkersRef.current = []
+      extraMarkersRef.current.forEach((marker) => marker.remove())
+      extraMarkersRef.current = []
       mapRef.current = null
       map.remove()
     }
@@ -224,6 +237,20 @@ export function TrackMap({
       )
     }
   }, [entries, mapReady, showKilometerMarkers])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady) return
+    extraMarkersRef.current.forEach((marker) => marker.remove())
+    extraMarkersRef.current = markers.map((marker) => {
+      const mapMarker = new maplibregl.Marker({ color: marker.color ?? '#E9A23B', scale: .8 })
+        .setLngLat([marker.longitude, marker.latitude])
+      if (marker.label) {
+        mapMarker.setPopup(new maplibregl.Popup({ offset: 18 }).setText(marker.label))
+      }
+      return mapMarker.addTo(map)
+    })
+  }, [mapReady, markers])
 
   useEffect(() => {
     const map = mapRef.current

@@ -12,6 +12,7 @@ import MoreVertRoundedIcon from '@mui/icons-material/MoreVertRounded'
 import RouteRoundedIcon from '@mui/icons-material/RouteRounded'
 import SpeedRoundedIcon from '@mui/icons-material/SpeedRounded'
 import TimerRoundedIcon from '@mui/icons-material/TimerRounded'
+import WaterDropRoundedIcon from '@mui/icons-material/WaterDropRounded'
 import {
   Alert,
   Box,
@@ -39,6 +40,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom'
 import { activitiesApi, type Activity, type ActivityUpdate } from '../api'
 import { ActivityCharts } from '../components/ActivityCharts'
+import { ActivityPhotoGallery } from '../components/ActivityPhotoGallery'
 import { AiSummaryCard } from '../components/AiSummaryCard'
 import { MetricCard } from '../components/MetricCard'
 import { OverlayExportDialog } from '../components/OverlayExportDialog'
@@ -54,6 +56,7 @@ import {
   formatDuration,
   formatElevation,
   formatHeartRate,
+  formatHydration,
   formatSpeedMps,
 } from '../utils/format'
 
@@ -148,12 +151,13 @@ export function ActivityDetailPage() {
 
       {reanalyze.isError && <Alert severity="error" sx={{ mb: 2 }}>{errorMessage(reanalyze.error)}</Alert>}
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(3, 1fr)', xl: 'repeat(5, 1fr)' }, gap: 1.5, mb: 3 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(3, 1fr)', xl: 'repeat(6, 1fr)' }, gap: 1.5, mb: 3 }}>
         <MetricCard label="Distanz" value={formatDistance(item.distance_m)} icon={<RouteRoundedIcon />} accent={theme.palette.chart.blue} />
         <MetricCard label="Bewegungszeit" value={formatDuration(item.moving_time_s)} icon={<TimerRoundedIcon />} accent={theme.palette.chart.teal} />
         <MetricCard label="Höhenmeter" value={formatElevation(item.elevation_gain_m)} icon={<LandscapeRoundedIcon />} accent={theme.palette.chart.lime} />
         <MetricCard label="Ø Tempo" value={formatSpeedMps(item.avg_speed_mps)} icon={<SpeedRoundedIcon />} accent={theme.palette.chart.amber} />
         <MetricCard label="Ø Herzfrequenz" value={formatHeartRate(item.avg_hr_bpm)} icon={<FavoriteRoundedIcon />} accent={theme.palette.chart.coral} />
+        <MetricCard label="Trinkmenge" value={formatHydration(item.hydration_ml)} icon={<WaterDropRoundedIcon />} accent={theme.palette.chart.blue} hint="während der Fahrt" />
       </Box>
 
       <Card sx={{ overflow: 'hidden', mb: 3 }}>
@@ -161,11 +165,13 @@ export function ActivityDetailPage() {
       </Card>
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2.5, mb: 3 }}>
-        <AiSummaryCard activityId={id} fallback={item.ai_summary} provider={item.ai_provider} />
+        <AiSummaryCard activityId={id} fallback={item.ai_summary} provider={item.ai_provider} dataBasis={item.ai_data_basis} />
         <WeatherCard activityId={id} fallback={item.weather} />
       </Box>
 
       <ActivityCharts points={points} />
+
+      <ActivityPhotoGallery activityId={id} trackPoints={points} />
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2.5, mt: 3 }}>
         <Card>
@@ -208,8 +214,8 @@ export function ActivityDetailPage() {
 
 function EditActivityDialog({ open, onClose, activity }: { open: boolean; onClose: () => void; activity: Activity }) {
   const client = useQueryClient()
-  const [values, setValues] = useState<ActivityUpdate>({ title: activity.title, type: activity.type, notes: activity.notes })
-  useEffect(() => setValues({ title: activity.title, type: activity.type, notes: activity.notes }), [activity])
+  const [values, setValues] = useState<ActivityUpdate>({ title: activity.title, type: activity.type, notes: activity.notes, hydration_ml: activity.hydration_ml })
+  useEffect(() => setValues({ title: activity.title, type: activity.type, notes: activity.notes, hydration_ml: activity.hydration_ml }), [activity])
   const mutation = useMutation({
     mutationFn: () => activitiesApi.update(activity.id, values),
     onSuccess: async (updated) => {
@@ -224,10 +230,19 @@ function EditActivityDialog({ open, onClose, activity }: { open: boolean; onClos
       <DialogContent><Stack spacing={2.25} sx={{ pt: 1 }}>
         <TextField label="Titel" required fullWidth value={values.title ?? ''} onChange={(event) => setValues((current) => ({ ...current, title: event.target.value }))} />
         <FormControl fullWidth><InputLabel id="edit-type-label">Aktivitätstyp</InputLabel><Select labelId="edit-type-label" label="Aktivitätstyp" value={values.type ?? 'ride'} onChange={(event) => setValues((current) => ({ ...current, type: event.target.value }))}>{activityTypes.map((type) => <MenuItem key={type.value} value={type.value}>{type.label}</MenuItem>)}</Select></FormControl>
+        <TextField
+          label="Trinkmenge während der Aktivität"
+          type="number"
+          fullWidth
+          value={values.hydration_ml ?? ''}
+          onChange={(event) => setValues((current) => ({ ...current, hydration_ml: event.target.value === '' ? null : Number(event.target.value) }))}
+          inputProps={{ min: 0, max: 20000, step: 50 }}
+          helperText="In Millilitern, zum Beispiel 750 ml. Leer lassen, wenn die Menge nicht erfasst wurde."
+        />
         <TextField label="Private Notizen" multiline minRows={5} fullWidth value={values.notes ?? ''} onChange={(event) => setValues((current) => ({ ...current, notes: event.target.value }))} />
         {mutation.isError && <Alert severity="error">{errorMessage(mutation.error)}</Alert>}
       </Stack></DialogContent>
-      <DialogActions sx={{ px: 3, pb: 3 }}><Button color="inherit" onClick={onClose}>Abbrechen</Button><Button variant="contained" disabled={mutation.isPending || !values.title?.trim()} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Wird gespeichert …' : 'Speichern'}</Button></DialogActions>
+      <DialogActions sx={{ px: 3, pb: 3 }}><Button color="inherit" onClick={onClose}>Abbrechen</Button><Button variant="contained" disabled={mutation.isPending || !values.title?.trim() || (values.hydration_ml != null && (values.hydration_ml < 0 || values.hydration_ml > 20000))} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Wird gespeichert …' : 'Speichern'}</Button></DialogActions>
     </Dialog>
   )
 }

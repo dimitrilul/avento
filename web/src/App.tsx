@@ -12,11 +12,14 @@ const BootstrapPage = lazy(() => import('./pages/BootstrapPage').then((module) =
 const ChatPage = lazy(() => import('./pages/ChatPage').then((module) => ({ default: module.ChatPage })))
 const ComparePage = lazy(() => import('./pages/ComparePage').then((module) => ({ default: module.ComparePage })))
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })))
+const DevelopmentPage = lazy(() => import('./pages/DevelopmentPage').then((module) => ({ default: module.DevelopmentPage })))
 const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })))
 const ProfilePage = lazy(() => import('./pages/ProfilePage').then((module) => ({ default: module.ProfilePage })))
+const RecordsPage = lazy(() => import('./pages/RecordsPage').then((module) => ({ default: module.RecordsPage })))
 const RegisterPage = lazy(() => import('./pages/RegisterPage').then((module) => ({ default: module.RegisterPage })))
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage').then((module) => ({ default: module.ResetPasswordPage })))
 const StatisticsPage = lazy(() => import('./pages/StatisticsPage').then((module) => ({ default: module.StatisticsPage })))
+const McpAdminPage = lazy(() => import('./pages/McpAdminPage').then((module) => ({ default: module.McpAdminPage })))
 
 export function App() {
   return (
@@ -34,9 +37,12 @@ export function App() {
           <Route path="/aktivitaeten/:id/analyse" element={<ActivityAnalysisPage />} />
           <Route path="/aktivitaeten/:id" element={<ActivityDetailPage />} />
           <Route path="/statistiken" element={<StatisticsPage />} />
+          <Route path="/entwicklung" element={<DevelopmentPage />} />
+          <Route path="/rekorde" element={<RecordsPage />} />
           <Route path="/vergleich" element={<ComparePage />} />
           <Route path="/coach" element={<ChatPage />} />
           <Route path="/profil" element={<ProfilePage />} />
+          <Route path="/administration/mcp" element={<McpAdminPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -77,27 +77,43 @@ export interface RequestOptions extends Omit<RequestInit, 'body'> {
   retry?: boolean
 }
 
-export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+function requestUrl(path: string) {
+  if (/^(https?:|blob:|data:)/i.test(path)) return path
+  if (path.startsWith('/api/')) return path
+  if (path.startsWith(API_URL)) return path
+  return `${API_URL}${path.startsWith('/') ? path : `/${path}`}`
+}
+
+function isTrustedApiTarget(target: string) {
+  if (/^(blob:|data:)/i.test(target)) return false
+  const targetUrl = new URL(target, window.location.origin)
+  const apiBase = new URL(API_URL, window.location.origin)
+  return targetUrl.origin === apiBase.origin && targetUrl.pathname.startsWith(apiBase.pathname)
+}
+
+async function apiResponse(path: string, options: RequestOptions = {}): Promise<Response> {
   const { body, auth = true, retry = true, headers: providedHeaders, ...init } = options
   const headers = new Headers(providedHeaders)
   const tokens = tokenStore.get()
   const isFormData = body instanceof FormData
+  const target = requestUrl(path)
+  const trustedTarget = isTrustedApiTarget(target)
   if (body !== undefined && !isFormData) headers.set('Content-Type', 'application/json')
-  if (auth && tokens?.access_token) headers.set('Authorization', `Bearer ${tokens.access_token}`)
+  if (auth && trustedTarget && tokens?.access_token) headers.set('Authorization', `Bearer ${tokens.access_token}`)
 
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await fetch(target, {
     ...init,
     headers,
     body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
   })
 
-  if (response.status === 401 && auth && retry && tokens?.refresh_token) {
+  if (response.status === 401 && auth && trustedTarget && retry && tokens?.refresh_token) {
     try {
       refreshPromise ??= refreshTokens().finally(() => {
         refreshPromise = null
       })
       await refreshPromise
-      return apiRequest<T>(path, { ...options, retry: false })
+      return apiResponse(path, { ...options, retry: false })
     } catch (error) {
       tokenStore.clear()
       throw error
@@ -105,8 +121,18 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   if (!response.ok) throw await readError(response)
+  return response
+}
+
+export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const response = await apiResponse(path, options)
   if (response.status === 204) return undefined as T
   return (await response.json()) as T
+}
+
+export async function apiBlobRequest(path: string, options: RequestOptions = {}): Promise<Blob> {
+  const response = await apiResponse(path, options)
+  return response.blob()
 }
 
 export const apiUrl = API_URL

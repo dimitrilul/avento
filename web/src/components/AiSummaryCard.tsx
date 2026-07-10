@@ -2,10 +2,11 @@ import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded'
 import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded'
 import { Alert, Box, Button, Card, CardContent, Chip, Divider, Skeleton, Stack, Typography } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { activitiesApi } from '../api'
+import { activitiesApi, type AIDataBasis } from '../api'
 import { errorMessage, formatDateTime } from '../utils/format'
+import { AIDataBasisPanel } from './AIDataBasisPanel'
 
-export function AiSummaryCard({ activityId, fallback, provider }: { activityId: string; fallback?: string | null; provider?: string | null }) {
+export function AiSummaryCard({ activityId, fallback, provider, dataBasis }: { activityId: string; fallback?: string | null; provider?: string | null; dataBasis?: AIDataBasis | null }) {
   const client = useQueryClient()
   const query = useQuery({ queryKey: ['activity', activityId, 'summary'], queryFn: () => activitiesApi.summary(activityId), retry: false })
   const generate = useMutation({
@@ -33,6 +34,9 @@ export function AiSummaryCard({ activityId, fallback, provider }: { activityId: 
               <Typography variant="caption" color="text.secondary">{query.data?.updated_at ? `Erstellt ${formatDateTime(query.data.updated_at)}` : 'Automatisch aus deinen Fahrtdaten erstellt'}</Typography>
               <Button size="small" startIcon={<RefreshRoundedIcon />} onClick={() => generate.mutate(true)} disabled={generate.isPending}>Neu erstellen</Button>
             </Stack>
+            <Box sx={{ mt: 1.5 }}>
+              <AIDataBasisPanel dataBasis={query.data?.data_basis ?? dataBasis} provider={activeProvider} title="Datengrundlage der Auswertung" />
+            </Box>
           </>
         ) : (
           <Stack spacing={1.5}>

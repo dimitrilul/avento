@@ -33,6 +33,14 @@ export const formatHeartRate = (bpm?: number | null) =>
 export const formatPower = (watts?: number | null) =>
   watts == null ? '–' : `${integer.format(watts)} W`
 
+export const formatHydration = (millilitres?: number | null) => {
+  if (millilitres == null) return '–'
+  if (millilitres >= 1000) {
+    return `${new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 }).format(millilitres / 1000)} l`
+  }
+  return `${integer.format(millilitres)} ml`
+}
+
 export const formatDuration = (seconds?: number | null) => {
   if (seconds == null) return '–'
   const hours = Math.floor(seconds / 3600)

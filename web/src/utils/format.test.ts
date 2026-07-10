@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatDistance, formatDuration, formatSpeedMps } from './format'
+import { formatDistance, formatDuration, formatHydration, formatSpeedMps } from './format'
 
 describe('deutsche Werteformatierung', () => {
   it('formatiert Meter als Kilometer', () => {
@@ -12,5 +12,11 @@ describe('deutsche Werteformatierung', () => {
 
   it('wandelt Meter pro Sekunde in Kilometer pro Stunde um', () => {
     expect(formatSpeedMps(10)).toBe('36 km/h')
+  })
+
+  it('formatiert Trinkmengen passend in Milliliter oder Liter', () => {
+    expect(formatHydration(750)).toBe('750 ml')
+    expect(formatHydration(1500)).toBe('1,5 l')
+    expect(formatHydration(null)).toBe('–')
   })
 })

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -36,6 +36,10 @@ class User(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     activities: Mapped[list["Activity"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    activity_photos: Mapped[list["ActivityPhoto"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class Invitation(Base):
@@ -85,6 +89,7 @@ class Activity(Base):
     title: Mapped[str] = mapped_column(String(200))
     activity_type: Mapped[str] = mapped_column(String(50), default="cycling")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    hydration_ml: Mapped[int | None] = mapped_column(Integer, nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     ended_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
@@ -110,9 +115,51 @@ class Activity(Base):
     weather_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ai_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     ai_provider: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    ai_data_basis: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     ai_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     user: Mapped[User] = relationship(back_populates="activities")
+    photos: Mapped[list["ActivityPhoto"]] = relationship(
+        back_populates="activity",
+        cascade="all, delete-orphan",
+    )
+
+
+class ActivityPhoto(Base):
+    __tablename__ = "activity_photos"
+    __table_args__ = (
+        UniqueConstraint("activity_id", "file_hash", name="uq_activity_photo_hash"),
+        CheckConstraint("size_bytes > 0", name="ck_activity_photo_size_positive"),
+        CheckConstraint("width > 0 AND height > 0", name="ck_activity_photo_dimensions_positive"),
+        CheckConstraint("latitude IS NULL OR (latitude >= -90 AND latitude <= 90)", name="ck_activity_photo_latitude"),
+        CheckConstraint(
+            "longitude IS NULL OR (longitude >= -180 AND longitude <= 180)",
+            name="ck_activity_photo_longitude",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4_str)
+    activity_id: Mapped[str] = mapped_column(
+        ForeignKey("activities.id", ondelete="CASCADE"),
+        index=True,
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    storage_path: Mapped[str] = mapped_column(String(1024), unique=True)
+    original_filename: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str] = mapped_column(String(100))
+    file_hash: Mapped[str] = mapped_column(String(64), index=True)
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    width: Mapped[int] = mapped_column(Integer)
+    height: Mapped[int] = mapped_column(Integer)
+    captured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    caption: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    activity: Mapped[Activity] = relationship(back_populates="photos")
+    user: Mapped[User] = relationship(back_populates="activity_photos")

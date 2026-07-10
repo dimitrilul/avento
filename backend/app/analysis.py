@@ -147,6 +147,11 @@ def _activity_wind(activity: Activity) -> float | None:
 def comparison_metric(activity: Activity) -> dict[str, Any]:
     speed_kmh = activity.avg_speed_mps * 3.6
     efficiency = speed_kmh / activity.avg_hr_bpm if activity.avg_hr_bpm else None
+    hydration_rate = (
+        activity.hydration_ml / (activity.duration_s / 3600)
+        if activity.hydration_ml is not None and activity.duration_s > 0
+        else None
+    )
     return {
         "activity_id": activity.id,
         "title": activity.title,
@@ -159,6 +164,8 @@ def comparison_metric(activity: Activity) -> dict[str, Any]:
         "max_hr_bpm": activity.max_hr_bpm,
         "efficiency_kmh_per_bpm": round(efficiency, 3) if efficiency is not None else None,
         "headwind_kmh": _activity_wind(activity),
+        "hydration_ml": activity.hydration_ml,
+        "hydration_rate_ml_per_hour": round(hydration_rate) if hydration_rate is not None else None,
         "relative_score": 0.0,
     }
 
@@ -312,12 +319,30 @@ def segment_metrics(activity: Activity, start_km: float, end_km: float) -> dict[
 
 
 def coaching_context(activity: Activity, similar: list[Activity], goals: list[str]) -> dict[str, Any]:
+    hydration_rate = (
+        activity.hydration_ml / (activity.duration_s / 3600)
+        if activity.hydration_ml is not None and activity.duration_s > 0
+        else None
+    )
     if not similar:
-        return {"similar_activities": [], "development": {}, "training_goals": goals}
+        return {
+            "similar_activities": [],
+            "development": {},
+            "hydration": {
+                "amount_ml": activity.hydration_ml,
+                "rate_ml_per_hour": round(hydration_rate) if hydration_rate is not None else None,
+            },
+            "training_goals": goals,
+        }
     avg_speed = mean(candidate.avg_speed_mps for candidate in similar)
     hr_candidates = [candidate.avg_hr_bpm for candidate in similar if candidate.avg_hr_bpm is not None]
     avg_hr = mean(hr_candidates) if hr_candidates else None
     distance_candidates = [candidate.distance_m for candidate in similar]
+    hydration_candidates = [
+        candidate.hydration_ml / (candidate.duration_s / 3600)
+        for candidate in similar
+        if candidate.hydration_ml is not None and candidate.duration_s > 0
+    ]
     target_speed_kmh = activity.avg_speed_mps * 3.6
     comparison_quality = "similar" if len(similar) >= 3 and all(
         similarity_score(activity, candidate) <= 1.5 for candidate in similar
@@ -328,11 +353,14 @@ def coaching_context(activity: Activity, similar: list[Activity], goals: list[st
                 "id": candidate.id,
                 "title": candidate.title,
                 "date": candidate.started_at.date().isoformat(),
+                "started_at": candidate.started_at.isoformat(),
+                "ended_at": candidate.ended_at.isoformat(),
                 "distance_km": round(candidate.distance_m / 1000, 1),
                 "average_speed_kmh": round(candidate.avg_speed_mps * 3.6, 1),
                 "average_heart_rate_bpm": round(candidate.avg_hr_bpm) if candidate.avg_hr_bpm else None,
                 "elevation_gain_m": round(candidate.elevation_gain_m),
                 "net_headwind_kmh": _activity_wind(candidate),
+                "hydration_ml": candidate.hydration_ml,
             }
             for candidate in similar
         ],
@@ -344,6 +372,159 @@ def coaching_context(activity: Activity, similar: list[Activity], goals: list[st
             "heart_rate_difference_bpm": round(activity.avg_hr_bpm - avg_hr, 1)
             if activity.avg_hr_bpm is not None and avg_hr is not None
             else None,
+            "hydration_rate_difference_ml_per_hour": round(hydration_rate - mean(hydration_candidates))
+            if hydration_rate is not None and hydration_candidates
+            else None,
+        },
+        "hydration": {
+            "amount_ml": activity.hydration_ml,
+            "rate_ml_per_hour": round(hydration_rate) if hydration_rate is not None else None,
+            "comparison_count": len(hydration_candidates),
         },
         "training_goals": goals,
+    }
+
+
+def _track_time(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _distance_timeline(activity: Activity) -> list[tuple[float, float]]:
+    timeline: list[tuple[float, float]] = []
+    origin: datetime | None = None
+    previous_distance = -1.0
+    previous_seconds = -1.0
+    for point in activity.track_points or []:
+        distance = _number(point.get("distance_m"))
+        point_time = _track_time(point.get("time"))
+        if distance is None or point_time is None or distance < 0:
+            continue
+        if origin is None:
+            origin = point_time
+        seconds = (point_time - origin).total_seconds()
+        if seconds < previous_seconds or distance + 1 < previous_distance:
+            continue
+        distance = max(distance, previous_distance)
+        timeline.append((distance, seconds))
+        previous_distance = distance
+        previous_seconds = seconds
+    return timeline
+
+
+def _time_at_distance(
+    timeline: list[tuple[float, float]],
+    target_distance: float,
+    *,
+    latest_exact: bool,
+) -> float | None:
+    exact = [seconds for distance, seconds in timeline if abs(distance - target_distance) <= 1e-6]
+    if exact:
+        return max(exact) if latest_exact else min(exact)
+    for (distance_a, seconds_a), (distance_b, seconds_b) in zip(timeline, timeline[1:]):
+        if distance_a < target_distance < distance_b:
+            fraction = (target_distance - distance_a) / (distance_b - distance_a)
+            return seconds_a + fraction * (seconds_b - seconds_a)
+    return None
+
+
+def fastest_distance_effort(activity: Activity, target_distance_m: float) -> dict[str, Any] | None:
+    """Return the fastest elapsed segment, preferring exact track-point interpolation."""
+    if target_distance_m <= 0 or activity.distance_m + 1 < target_distance_m:
+        return None
+    timeline = _distance_timeline(activity)
+    if len(timeline) >= 2 and timeline[-1][0] - timeline[0][0] + 1 >= target_distance_m:
+        minimum = timeline[0][0]
+        maximum = timeline[-1][0]
+        candidate_starts = {
+            distance
+            for distance, _ in timeline
+            if minimum <= distance <= maximum - target_distance_m
+        }
+        candidate_starts.update(
+            distance - target_distance_m
+            for distance, _ in timeline
+            if minimum <= distance - target_distance_m <= maximum - target_distance_m
+        )
+        best: tuple[float, float] | None = None
+        for segment_start in sorted(candidate_starts):
+            segment_end = segment_start + target_distance_m
+            started = _time_at_distance(timeline, segment_start, latest_exact=True)
+            ended = _time_at_distance(timeline, segment_end, latest_exact=False)
+            if started is None or ended is None or ended <= started:
+                continue
+            duration = ended - started
+            if best is None or duration < best[0]:
+                best = duration, segment_start
+        if best is not None:
+            return {
+                "duration_s": round(best[0], 2),
+                "avg_speed_mps": round(target_distance_m / best[0], 3),
+                "source": "track_points_interpolated",
+                "estimated": False,
+                "segment_start_m": round(best[1], 2),
+                "segment_end_m": round(best[1] + target_distance_m, 2),
+            }
+    if activity.avg_speed_mps > 0:
+        duration = target_distance_m / activity.avg_speed_mps
+        return {
+            "duration_s": round(duration, 2),
+            "avg_speed_mps": round(activity.avg_speed_mps, 3),
+            "source": "activity_average_fallback",
+            "estimated": True,
+            "segment_start_m": 0.0,
+            "segment_end_m": round(target_distance_m, 2),
+        }
+    return None
+
+
+def personal_records(
+    activities: Iterable[Activity],
+    target_distances_m: Iterable[int] = (10_000, 20_000, 30_000, 40_000, 50_000),
+) -> dict[str, Any]:
+    items = list(activities)
+    distance_records: list[dict[str, Any]] = []
+    for target in target_distances_m:
+        candidates: list[tuple[Activity, dict[str, Any]]] = []
+        for activity in items:
+            effort = fastest_distance_effort(activity, target)
+            if effort is not None:
+                candidates.append((activity, effort))
+        if not candidates:
+            continue
+        activity, effort = min(candidates, key=lambda candidate: candidate[1]["duration_s"])
+        distance_records.append(
+            {
+                "target_distance_m": target,
+                **effort,
+                "activity_id": activity.id,
+                "title": activity.title,
+                "started_at": activity.started_at,
+            }
+        )
+
+    def activity_record(activity: Activity | None) -> dict[str, Any] | None:
+        if activity is None:
+            return None
+        return {
+            "activity_id": activity.id,
+            "title": activity.title,
+            "started_at": activity.started_at,
+            "distance_m": round(activity.distance_m, 2),
+            "moving_time_s": round(activity.moving_time_s, 2),
+            "avg_speed_mps": round(activity.avg_speed_mps, 3),
+        }
+
+    longest = max(items, key=lambda activity: activity.distance_m, default=None)
+    fastest = max(items, key=lambda activity: activity.avg_speed_mps, default=None)
+    return {
+        "distance_records": distance_records,
+        "longest_ride": activity_record(longest),
+        "highest_average_speed": activity_record(fastest),
     }

@@ -12,7 +12,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from ..ai import LocalSummaryProvider, comparison_summary, get_summary_provider
+from ..ai import (
+    LocalSummaryProvider,
+    activity_summary_data_basis,
+    comparison_data_basis,
+    comparison_summary,
+    get_summary_provider,
+)
 from ..analysis import (
     add_relative_scores,
     coaching_context,
@@ -24,7 +30,12 @@ from ..analysis import (
 from ..config import get_settings
 from ..database import get_db
 from ..deps import get_current_user
-from ..models import Activity, User, utcnow
+from ..models import Activity, ActivityPhoto, User, utcnow
+from ..photo_storage import (
+    finalize_staged_photo_deletions,
+    restore_staged_photo_deletions,
+    stage_photo_deletions,
+)
 from ..schemas import (
     ActivityListResponse,
     ActivityResponse,
@@ -66,6 +77,7 @@ def _activity_response(activity: Activity) -> ActivityResponse:
         title=activity.title,
         type=activity.activity_type,
         notes=activity.notes,
+        hydration_ml=activity.hydration_ml,
         original_filename=activity.original_filename,
         started_at=activity.started_at,
         ended_at=activity.ended_at,
@@ -88,6 +100,7 @@ def _activity_response(activity: Activity) -> ActivityResponse:
         weather_status=activity.weather_status,
         ai_summary=activity.ai_summary,
         ai_provider=activity.ai_provider,
+        ai_data_basis=activity.ai_data_basis if activity.ai_summary else None,
         created_at=activity.created_at,
         updated_at=activity.updated_at,
     )
@@ -96,6 +109,7 @@ def _activity_response(activity: Activity) -> ActivityResponse:
 def _invalidate_summary(activity: Activity) -> None:
     activity.ai_summary = None
     activity.ai_provider = None
+    activity.ai_data_basis = None
     activity.ai_updated_at = None
 
 
@@ -107,7 +121,7 @@ def _invalidate_later_summaries(db: Session, activity: Activity) -> None:
             Activity.id != activity.id,
             Activity.started_at > activity.started_at,
         )
-        .values(ai_summary=None, ai_provider=None, ai_updated_at=None)
+        .values(ai_summary=None, ai_provider=None, ai_data_basis=None, ai_updated_at=None)
     )
 
 
@@ -185,6 +199,7 @@ async def upload_activity(
     title: str | None = Form(default=None, max_length=200),
     type: str | None = Form(default=None, max_length=50),
     notes: str | None = Form(default=None, max_length=10000),
+    hydration_ml: int | None = Form(default=None, ge=0, le=20_000),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ActivityResponse:
@@ -220,6 +235,7 @@ async def upload_activity(
         title=(title.strip() if title and title.strip() else f"Radfahrt am {parsed.started_at:%d.%m.%Y}"),
         activity_type=(type.strip().lower() if type and type.strip() else parsed.activity_type),
         notes=notes.strip() if notes and notes.strip() else None,
+        hydration_ml=hydration_ml,
         started_at=parsed.started_at,
         ended_at=parsed.ended_at,
     )
@@ -296,12 +312,19 @@ def compare_activities(
         for profile in profiles
     ]
     ai_summary, ai_provider = comparison_summary(get_settings(), ordered, metrics, ai_profiles)
+    ai_data_basis = comparison_data_basis(
+        ordered,
+        metrics,
+        get_settings().timezone,
+        ai_provider,
+    )
     return CompareResponse(
         activities=[_activity_response(activity) for activity in ordered],
         metrics=metrics,
         profiles=profiles,
         ai_summary=ai_summary,
         ai_provider=ai_provider,
+        ai_data_basis=ai_data_basis,
     )
 
 
@@ -329,8 +352,11 @@ def update_activity(
         activity.activity_type = values["type"].strip().lower()
     if "notes" in values:
         activity.notes = values["notes"].strip() if values["notes"] and values["notes"].strip() else None
+    if "hydration_ml" in values:
+        activity.hydration_ml = values["hydration_ml"]
     if values:
         _invalidate_summary(activity)
+        _invalidate_later_summaries(db, activity)
     db.commit()
     db.refresh(activity)
     return _activity_response(activity)
@@ -366,9 +392,22 @@ def delete_activity(
 ) -> Response:
     activity = _activity_for_user(db, current_user, activity_id)
     file_path = Path(activity.original_file_path)
+    photo_paths = db.scalars(
+        select(ActivityPhoto.storage_path).where(ActivityPhoto.activity_id == activity.id)
+    ).all()
+    try:
+        staged_photos = stage_photo_deletions(photo_paths, get_settings().upload_dir)
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail="Zugehörige Fotodateien konnten nicht sicher entfernt werden.") from exc
     _invalidate_later_summaries(db, activity)
     db.delete(activity)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        restore_staged_photo_deletions(staged_photos)
+        raise
+    finalize_staged_photo_deletions(staged_photos)
     file_path.unlink(missing_ok=True)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -430,6 +469,12 @@ def _generate_summary(activity: Activity, db: Session, user: User) -> None:
         provider_name = "local_fallback"
     activity.ai_summary = summary
     activity.ai_provider = provider_name
+    activity.ai_data_basis = activity_summary_data_basis(
+        activity,
+        context,
+        settings.timezone,
+        provider_name,
+    )
     activity.ai_updated_at = utcnow()
 
 
@@ -440,11 +485,16 @@ def get_summary(
     db: Session = Depends(get_db),
 ) -> SummaryResponse:
     activity = _activity_for_user(db, current_user, activity_id)
-    if not activity.ai_summary or not activity.ai_provider or not activity.ai_updated_at:
+    if not activity.ai_summary or not activity.ai_provider or not activity.ai_updated_at or not activity.ai_data_basis:
         _generate_summary(activity, db, current_user)
         db.commit()
         db.refresh(activity)
-    return SummaryResponse(summary=activity.ai_summary, provider=activity.ai_provider, updated_at=activity.ai_updated_at)
+    return SummaryResponse(
+        summary=activity.ai_summary,
+        provider=activity.ai_provider,
+        updated_at=activity.ai_updated_at,
+        data_basis=activity.ai_data_basis,
+    )
 
 
 @router.post("/activities/{activity_id}/summary", response_model=SummaryResponse)
@@ -455,11 +505,16 @@ def create_summary(
     db: Session = Depends(get_db),
 ) -> SummaryResponse:
     activity = _activity_for_user(db, current_user, activity_id)
-    if force or not activity.ai_summary:
+    if force or not activity.ai_summary or not activity.ai_data_basis:
         _generate_summary(activity, db, current_user)
         db.commit()
         db.refresh(activity)
-    return SummaryResponse(summary=activity.ai_summary, provider=activity.ai_provider, updated_at=activity.ai_updated_at)
+    return SummaryResponse(
+        summary=activity.ai_summary,
+        provider=activity.ai_provider,
+        updated_at=activity.ai_updated_at,
+        data_basis=activity.ai_data_basis,
+    )
 
 
 @router.get("/statistics/overview", response_model=StatisticsOverview)

@@ -162,4 +162,5 @@ export const chatApi = {
     }),
 }
 
+export { activityPhotosApi, insightsApi, mcpAdminApi } from './roadmap'
 export type * from './types'

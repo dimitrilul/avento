@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded'
-import BuildRoundedIcon from '@mui/icons-material/BuildRounded'
 import DeleteSweepRoundedIcon from '@mui/icons-material/DeleteSweepRounded'
 import DirectionsBikeRoundedIcon from '@mui/icons-material/DirectionsBikeRounded'
 import SendRoundedIcon from '@mui/icons-material/SendRounded'
 import SmartToyRoundedIcon from '@mui/icons-material/SmartToyRounded'
 import TravelExploreRoundedIcon from '@mui/icons-material/TravelExploreRounded'
-import { Alert, Avatar, Box, Button, Card, CardContent, Chip, CircularProgress, Divider, MenuItem, Stack, TextField, Typography } from '@mui/material'
+import { Alert, Avatar, Box, Button, Card, CardContent, CircularProgress, Divider, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Link as RouterLink } from 'react-router-dom'
-import { activitiesApi, chatApi, type ChatHistoryItem, type ChatSource } from '../api'
+import { activitiesApi, chatApi, type AIDataBasis, type ChatHistoryItem, type ChatSource } from '../api'
 import { useAuth } from '../auth/AuthContext'
+import { AIDataBasisPanel } from '../components/AIDataBasisPanel'
 import { PageHeader } from '../components/PageHeader'
 import { errorMessage, formatDate } from '../utils/format'
 
@@ -19,6 +18,7 @@ interface ChatUiMessage extends ChatHistoryItem {
   sources?: ChatSource[]
   toolsUsed?: string[]
   provider?: string
+  dataBasis?: AIDataBasis | null
 }
 
 const quickPrompts = [
@@ -84,6 +84,7 @@ export function ChatPage() {
         sources: response.sources,
         toolsUsed: response.tools_used,
         provider: response.provider,
+        dataBasis: response.data_basis,
       }])
     },
   })
@@ -198,23 +199,17 @@ function ChatBubble({ message, profileName, avatar }: { message: ChatUiMessage; 
         <Box sx={{ px: 2, py: 1.5, bgcolor: user ? 'primary.main' : 'background.paper', color: user ? 'primary.contrastText' : 'text.primary', borderRadius: user ? '18px 4px 18px 18px' : '4px 18px 18px 18px', border: user ? 'none' : '1px solid', borderColor: 'divider', boxShadow: user ? 'none' : '0 8px 24px rgba(20,50,45,.05)' }}>
           <Typography sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>{message.content}</Typography>
         </Box>
-        {!user && (message.sources?.length || message.toolsUsed?.length) ? (
-          <Stack spacing={1} sx={{ mt: 1.1 }}>
-            {Boolean(message.sources?.length) && (
-              <Stack direction="row" gap={.75} flexWrap="wrap" alignItems="center">
-                <TravelExploreRoundedIcon sx={{ fontSize: 17, color: 'text.secondary' }} />
-                {message.sources?.map((source) => <Chip key={source.activity_id} size="small" clickable component={RouterLink} to={`/aktivitaeten/${source.activity_id}`} label={`${source.title} · ${formatDate(source.started_at)}`} />)}
-              </Stack>
-            )}
-            {Boolean(message.toolsUsed?.length) && (
-              <Stack direction="row" gap={.75} flexWrap="wrap" alignItems="center">
-                <BuildRoundedIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-                {message.toolsUsed?.map((tool) => <Chip key={tool} variant="outlined" size="small" label={toolLabels[tool] ?? tool.replaceAll('_', ' ')} />)}
-              </Stack>
-            )}
-            {message.provider && <Typography variant="caption" color="text.secondary">Antwort erstellt mit {message.provider}</Typography>}
-          </Stack>
-        ) : null}
+        {!user && message.provider && (
+          <Box sx={{ mt: 1.1 }}>
+            <AIDataBasisPanel
+              dataBasis={message.dataBasis}
+              sources={message.sources}
+              tools={message.toolsUsed}
+              toolLabels={toolLabels}
+              provider={message.provider}
+            />
+          </Box>
+        )}
       </Box>
     </Stack>
   )

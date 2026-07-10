@@ -12,7 +12,7 @@ from openai import OpenAI
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..ai import weather_facts
+from ..ai import chat_data_basis, weather_facts
 from ..analysis import (
     coaching_context,
     comparison_metric,
@@ -356,6 +356,8 @@ def _local_answer(payload: ChatRequest, db: Session, user: User) -> tuple[str, l
         heart_rate = development.get("heart_rate_difference_bpm")
         quality = development.get("comparison_quality")
         answer = f"{selected.title}: {selected.distance_m / 1000:.1f} km mit {selected.avg_speed_mps * 3.6:.1f} km/h im Durchschnitt."
+        if selected.hydration_ml is not None:
+            answer += f" Als Trinkmenge sind {selected.hydration_ml} ml dokumentiert."
         if speed is not None:
             basis = "ähnlichen früheren Fahrten" if quality == "similar" else "früheren Fahrten mit eingeschränkter Vergleichbarkeit"
             answer += f" Gegenüber {len(similar)} {basis} liegt das Tempo bei {speed:+.1f} km/h"
@@ -420,14 +422,20 @@ def chat(
     settings = get_settings()
     if not settings.openai_api_key:
         answer, activities, tools_used = _local_answer(payload, db, current_user)
+        source_activities = list({activity.id: activity for activity in activities}.values())[:10]
+        local_trace = [
+            {"name": name, "arguments": {}, "activity_ids": [activity.id for activity in source_activities]}
+            for name in tools_used
+        ]
         return ChatResponse(
             answer=answer,
             provider="local",
             sources=[
                 ChatSource(activity_id=activity.id, title=activity.title, started_at=activity.started_at)
-                for activity in list({activity.id: activity for activity in activities}.values())[:10]
+                for activity in source_activities
             ],
             tools_used=tools_used,
+            data_basis=chat_data_basis(source_activities, tools_used, settings.timezone, "local", local_trace),
         )
 
     client = OpenAI(
@@ -450,11 +458,14 @@ def chat(
     input_items.append({"role": "user", "content": user_content})
     sources: dict[str, Activity] = {focus_activity.id: focus_activity} if focus_activity else {}
     tools_used: list[str] = []
+    tool_trace: list[dict[str, Any]] = []
     instructions = (
         "Du bist Avento Coach, ein persönlicher deutschsprachiger Radsport-Coach. Nutze die Werkzeuge gezielt, "
         "statt Trainingswerte zu erraten. Vergleiche bevorzugt 3 bis 10 ähnliche frühere Fahrten und berücksichtige "
         "Distanz, Dauer, Höhenprofil, Herzfrequenz und streckenbezogenen Wind. Erkenne Fortschritte, lobe konkrete "
-        "Leistungen, motiviere unaufdringlich und gib höchstens zwei umsetzbare Trainingshinweise. Trenne belegte "
+        "Leistungen und berücksichtige dokumentierte Trinkmengen als Aufzeichnungswerte, ohne einen individuellen "
+        "Flüssigkeitsbedarf zu behaupten. "
+        "Motiviere unaufdringlich und gib höchstens zwei umsetzbare Trainingshinweise. Trenne belegte "
         "Werte klar von plausiblen Erklärungen. Gib keine medizinischen Diagnosen. Antworte kompakt und nenne die "
         "Titel verwendeter Aktivitäten. Nutze für Superlative wie beste, schnellste oder längste Fahrt das Werkzeug "
         "find_best_activities, das die gesamte Historie durchsucht. Nutze für Kilometerwerte und Höhenprofile "
@@ -485,9 +496,31 @@ def chat(
                         arguments = json.loads(call.arguments)
                     except (TypeError, json.JSONDecodeError):
                         arguments = {}
+                    sources_before = set(sources)
                     result = _execute_tool(call.name, arguments, db, current_user, sources)
                     tools_used.append(call.name)
                     executed_tool_calls += 1
+                    result_metrics = (
+                        {
+                            key: value
+                            for key, value in result.items()
+                            if isinstance(value, (str, int, float, bool)) or value is None
+                        }
+                        if isinstance(result, dict)
+                        else None
+                    )
+                    related_ids = set(sources) - sources_before
+                    requested_activity_id = arguments.get("activity_id")
+                    if requested_activity_id in sources:
+                        related_ids.add(str(requested_activity_id))
+                    tool_trace.append(
+                        {
+                            "name": call.name,
+                            "arguments": arguments,
+                            "activity_ids": sorted(related_ids),
+                            "result_metrics": result_metrics,
+                        }
+                    )
                 input_items.append(
                     {
                         "type": "function_call_output",
@@ -507,23 +540,46 @@ def chat(
         answer = response.output_text.strip()
         if not answer:
             raise RuntimeError("Leere KI-Antwort")
+        basis_activities = list(sources.values())
+        source_activities = basis_activities[:10]
+        unique_tools = list(dict.fromkeys(tools_used))
         return ChatResponse(
             answer=answer,
             provider="openai",
             sources=[
                 ChatSource(activity_id=activity.id, title=activity.title, started_at=activity.started_at)
-                for activity in list(sources.values())[:10]
+                for activity in source_activities
             ],
-            tools_used=list(dict.fromkeys(tools_used)),
+            tools_used=unique_tools,
+            data_basis=chat_data_basis(
+                basis_activities,
+                unique_tools,
+                settings.timezone,
+                "openai",
+                tool_trace,
+            ),
         )
     except Exception:
         answer, activities, local_tools = _local_answer(payload, db, current_user)
+        source_activities = list({activity.id: activity for activity in activities}.values())[:10]
+        combined_tools = list(dict.fromkeys([*tools_used, *local_tools]))
+        local_trace = [
+            {"name": name, "arguments": {}, "activity_ids": [activity.id for activity in source_activities]}
+            for name in local_tools
+        ]
         return ChatResponse(
             answer=answer,
             provider="local_fallback",
             sources=[
                 ChatSource(activity_id=activity.id, title=activity.title, started_at=activity.started_at)
-                for activity in list({activity.id: activity for activity in activities}.values())[:10]
+                for activity in source_activities
             ],
-            tools_used=list(dict.fromkeys([*tools_used, *local_tools])),
+            tools_used=combined_tools,
+            data_basis=chat_data_basis(
+                source_activities,
+                combined_tools,
+                settings.timezone,
+                "local_fallback",
+                local_trace,
+            ),
         )

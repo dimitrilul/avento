@@ -117,10 +117,44 @@ class PasswordResetRequest(BaseModel):
     new_password: str = Field(min_length=10, max_length=256)
 
 
+class AIDataPeriod(BaseModel):
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    timezone: str | None = None
+    label: str | None = None
+
+
+class AIDataMetric(BaseModel):
+    name: str
+    value: Any
+    unit: str | None = None
+    activity_id: str | None = None
+    source: str
+    method: str
+
+
+class AIDataMethod(BaseModel):
+    name: str
+    description: str
+    parameters: dict[str, Any] = Field(default_factory=dict)
+
+
+class AIDataBasis(BaseModel):
+    schema_version: str = "1.0"
+    generated_at: datetime
+    period: AIDataPeriod | None = None
+    activity_ids: list[str] = Field(default_factory=list)
+    metrics: list[AIDataMetric] = Field(default_factory=list)
+    methods: list[AIDataMethod] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+    facts: dict[str, Any] = Field(default_factory=dict)
+
+
 class ActivityUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     type: str | None = Field(default=None, min_length=1, max_length=50)
     notes: str | None = Field(default=None, max_length=10000)
+    hydration_ml: int | None = Field(default=None, ge=0, le=20_000)
 
 
 class ActivityResponse(BaseModel):
@@ -128,6 +162,7 @@ class ActivityResponse(BaseModel):
     title: str
     type: str
     notes: str | None
+    hydration_ml: int | None = None
     original_filename: str
     started_at: datetime
     ended_at: datetime
@@ -150,6 +185,7 @@ class ActivityResponse(BaseModel):
     weather_status: str
     ai_summary: str | None
     ai_provider: str | None
+    ai_data_basis: AIDataBasis | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -188,6 +224,43 @@ class SummaryResponse(BaseModel):
     summary: str
     provider: str
     updated_at: datetime
+    data_basis: AIDataBasis | None = None
+
+
+class ActivityPhotoResponse(BaseModel):
+    id: str
+    activity_id: str
+    original_filename: str
+    content_type: str
+    size_bytes: int
+    width: int
+    height: int
+    captured_at: datetime | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    caption: str | None = None
+    file_url: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class ActivityPhotoListResponse(BaseModel):
+    items: list[ActivityPhotoResponse]
+    total: int
+
+
+class ActivityPhotoUpdate(BaseModel):
+    captured_at: datetime | None = None
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+    caption: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("captured_at")
+    @classmethod
+    def captured_at_has_timezone(cls, value: datetime | None) -> datetime | None:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("captured_at muss eine Zeitzone enthalten.")
+        return value
 
 
 class StatisticsSeriesPoint(BaseModel):
@@ -200,6 +273,8 @@ class StatisticsSeriesPoint(BaseModel):
     training_load: float
     avg_speed_mps: float | None
     avg_hr_bpm: float | None
+    hydration_ml: int = 0
+    hydration_activity_count: int = 0
 
 
 class StatisticsComparison(BaseModel):
@@ -213,6 +288,8 @@ class StatisticsComparison(BaseModel):
     training_load: float
     avg_speed_mps: float | None
     avg_hr_bpm: float | None
+    hydration_ml: int = 0
+    hydration_activity_count: int = 0
     changes: dict[str, float | None]
 
 
@@ -223,8 +300,10 @@ class StatisticsOverview(BaseModel):
     moving_time_s: float
     elevation_gain_m: float
     training_load: float
-    avg_speed_mps: float
+    avg_speed_mps: float | None
     avg_hr_bpm: float | None = None
+    hydration_ml: int = 0
+    hydration_activity_count: int = 0
     granularity: str = "month"
     series: list[StatisticsSeriesPoint] = Field(default_factory=list)
     comparison: StatisticsComparison | None = None
@@ -247,6 +326,8 @@ class ComparisonMetric(BaseModel):
     max_hr_bpm: int | None
     efficiency_kmh_per_bpm: float | None
     headwind_kmh: float | None
+    hydration_ml: int | None = None
+    hydration_rate_ml_per_hour: float | None = None
     relative_score: float | None
 
 
@@ -270,6 +351,100 @@ class CompareResponse(BaseModel):
     profiles: list[ComparisonProfile] = Field(default_factory=list)
     ai_summary: str | None = None
     ai_provider: str | None = None
+    ai_data_basis: AIDataBasis | None = None
+
+
+class DistanceRecord(BaseModel):
+    target_distance_m: int
+    duration_s: float
+    avg_speed_mps: float
+    activity_id: str
+    title: str
+    started_at: datetime
+    source: str
+    estimated: bool
+    segment_start_m: float
+    segment_end_m: float
+
+
+class ActivityRecord(BaseModel):
+    activity_id: str
+    title: str
+    started_at: datetime
+    distance_m: float
+    moving_time_s: float
+    avg_speed_mps: float
+
+
+class PersonalRecordsResponse(BaseModel):
+    generated_at: datetime
+    distance_records: list[DistanceRecord]
+    longest_ride: ActivityRecord | None = None
+    highest_average_speed: ActivityRecord | None = None
+    methods: list[AIDataMethod] = Field(default_factory=list)
+
+
+class InsightPeriod(BaseModel):
+    date_from: date
+    date_to: date
+
+
+class InsightAggregate(BaseModel):
+    period: str
+    period_start: date
+    period_end: date
+    activity_count: int
+    distance_m: float
+    moving_time_s: float
+    elevation_gain_m: float
+    training_load: float
+    avg_speed_mps: float | None
+    avg_hr_bpm: float | None
+    hydration_ml: int = 0
+    changes_from_previous: dict[str, float | None] = Field(default_factory=dict)
+
+
+class FitnessTrend(BaseModel):
+    status: str
+    confidence: str
+    sample_size: int
+    speed_change_percent: float | None = None
+    heart_rate_efficiency_change_percent: float | None = None
+    statement: str
+
+
+class InsightPattern(BaseModel):
+    kind: str
+    confidence: str
+    sample_size: int
+    statement: str
+    evidence: dict[str, Any]
+    method: str
+
+
+class LongTermInsightsResponse(BaseModel):
+    generated_at: datetime
+    period: InsightPeriod
+    current: dict[str, Any]
+    previous_period: InsightPeriod
+    previous: dict[str, Any]
+    changes: dict[str, float | None]
+    monthly: list[InsightAggregate]
+    yearly: list[InsightAggregate]
+    fitness_trend: FitnessTrend
+    patterns: list[InsightPattern]
+    methods: list[AIDataMethod]
+    disclaimer: str
+
+
+class PeriodReviewResponse(BaseModel):
+    year: int
+    season: str
+    period: InsightPeriod
+    summary: str
+    provider: str
+    generated_at: datetime
+    data_basis: AIDataBasis
 
 
 class ChatHistoryMessage(BaseModel):
@@ -300,3 +475,4 @@ class ChatResponse(BaseModel):
     provider: str
     sources: list[ChatSource] = Field(default_factory=list)
     tools_used: list[str] = Field(default_factory=list)
+    data_basis: AIDataBasis | None = None

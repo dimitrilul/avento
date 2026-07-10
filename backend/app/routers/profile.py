@@ -115,7 +115,7 @@ def update_profile(
         db.execute(
             update(Activity)
             .where(Activity.user_id == current_user.id)
-            .values(ai_summary=None, ai_provider=None, ai_updated_at=None)
+            .values(ai_summary=None, ai_provider=None, ai_data_basis=None, ai_updated_at=None)
         )
     db.commit()
     db.refresh(current_user)

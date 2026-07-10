@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
+import AdminPanelSettingsRoundedIcon from '@mui/icons-material/AdminPanelSettingsRounded'
 import BarChartRoundedIcon from '@mui/icons-material/BarChartRounded'
 import CompareArrowsRoundedIcon from '@mui/icons-material/CompareArrowsRounded'
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded'
 import DirectionsBikeRoundedIcon from '@mui/icons-material/DirectionsBikeRounded'
+import EmojiEventsRoundedIcon from '@mui/icons-material/EmojiEventsRounded'
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded'
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded'
 import SmartToyRoundedIcon from '@mui/icons-material/SmartToyRounded'
+import TimelineRoundedIcon from '@mui/icons-material/TimelineRounded'
 import {
   AppBar,
   Avatar,
@@ -32,6 +35,8 @@ const drawerWidth = 248
 const nav = [
   { label: 'Übersicht', path: '/', icon: <DashboardRoundedIcon /> },
   { label: 'Aktivitäten', path: '/aktivitaeten', icon: <DirectionsBikeRoundedIcon /> },
+  { label: 'Entwicklung', path: '/entwicklung', icon: <TimelineRoundedIcon /> },
+  { label: 'Rekorde', path: '/rekorde', icon: <EmojiEventsRoundedIcon /> },
   { label: 'Statistiken', path: '/statistiken', icon: <BarChartRoundedIcon /> },
   { label: 'Vergleich', path: '/vergleich', icon: <CompareArrowsRoundedIcon /> },
   { label: 'Avento Chat', path: '/coach', icon: <SmartToyRoundedIcon /> },
@@ -44,11 +49,14 @@ export interface ShellOutletContext {
 function Navigation({ onNavigate }: { onNavigate?: () => void }) {
   const { profile } = useAuth()
   const location = useLocation()
+  const navigation = profile?.is_admin
+    ? [...nav, { label: 'MCP-Verwaltung', path: '/administration/mcp', icon: <AdminPanelSettingsRoundedIcon /> }]
+    : nav
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 2 }}>
       <Box sx={{ px: 1, py: 1.25, mb: 3 }}><Brand /></Box>
       <List sx={{ display: 'grid', gap: 0.5 }}>
-        {nav.map((item) => {
+        {navigation.map((item) => {
           const selected = item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path)
           return (
             <ListItemButton

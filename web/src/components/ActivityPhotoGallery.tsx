@@ -1,0 +1,340 @@
+import { useEffect, useMemo, useState } from 'react'
+import AddAPhotoRoundedIcon from '@mui/icons-material/AddAPhotoRounded'
+import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded'
+import CloseRoundedIcon from '@mui/icons-material/CloseRounded'
+import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
+import EditRoundedIcon from '@mui/icons-material/EditRounded'
+import ImageNotSupportedRoundedIcon from '@mui/icons-material/ImageNotSupportedRounded'
+import LocationOnRoundedIcon from '@mui/icons-material/LocationOnRounded'
+import PhotoLibraryRoundedIcon from '@mui/icons-material/PhotoLibraryRounded'
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  Skeleton,
+  Stack,
+  TextField,
+  Tooltip,
+  Typography,
+} from '@mui/material'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  activityPhotosApi,
+  type ActivityPhoto,
+  type ActivityPhotoUpdate,
+  type ActivityPhotoUpload,
+  type TrackPoint,
+} from '../api'
+import { errorMessage, formatDateTime } from '../utils/format'
+import { EmptyState, ErrorState } from './States'
+import { TrackMap, type TrackMapMarker } from './TrackMap'
+
+const maximumPhotoBytes = 15 * 1024 * 1024
+
+function localDateTimeValue(value?: string | null) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+  return local.toISOString().slice(0, 16)
+}
+
+export function capturedAtForApi(value: string) {
+  if (!value) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
+
+export function ActivityPhotoGallery({ activityId, trackPoints }: { activityId: string; trackPoints: TrackPoint[] }) {
+  const client = useQueryClient()
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [editPhoto, setEditPhoto] = useState<ActivityPhoto | null>(null)
+  const [deletePhoto, setDeletePhoto] = useState<ActivityPhoto | null>(null)
+  const [detailPhoto, setDetailPhoto] = useState<ActivityPhoto | null>(null)
+  const photos = useQuery({
+    queryKey: ['activity', activityId, 'photos'],
+    queryFn: () => activityPhotosApi.list(activityId),
+    enabled: Boolean(activityId),
+  })
+  const refresh = () => client.invalidateQueries({ queryKey: ['activity', activityId, 'photos'] })
+  const upload = useMutation({
+    mutationFn: (data: ActivityPhotoUpload) => activityPhotosApi.upload(activityId, data),
+    onSuccess: async () => {
+      await refresh()
+      setUploadOpen(false)
+    },
+  })
+  const update = useMutation({
+    mutationFn: ({ photoId, data }: { photoId: string; data: ActivityPhotoUpdate }) =>
+      activityPhotosApi.update(activityId, photoId, data),
+    onSuccess: async () => {
+      await refresh()
+      setEditPhoto(null)
+    },
+  })
+  const remove = useMutation({
+    mutationFn: (photoId: string) => activityPhotosApi.delete(activityId, photoId),
+    onSuccess: async () => {
+      await refresh()
+      setDeletePhoto(null)
+      setDetailPhoto(null)
+    },
+  })
+  const locatedPhotos = useMemo(
+    () => photos.data?.items.filter((photo) => photo.latitude != null && photo.longitude != null) ?? [],
+    [photos.data?.items],
+  )
+  const markers = useMemo<TrackMapMarker[]>(() => locatedPhotos.map((photo) => ({
+    id: photo.id,
+    latitude: photo.latitude!,
+    longitude: photo.longitude!,
+    label: photo.caption || 'Aktivitätsfoto',
+    color: '#E9A23B',
+  })), [locatedPhotos])
+
+  return (
+    <Box component="section" aria-labelledby="activity-photos-title" sx={{ mt: 3 }}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'stretch', sm: 'center' }} gap={1.5} sx={{ mb: 1.75 }}>
+        <Box>
+          <Stack direction="row" alignItems="center" gap={1}>
+            <PhotoLibraryRoundedIcon color="primary" />
+            <Typography id="activity-photos-title" variant="h3">Fotogalerie</Typography>
+          </Stack>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: .35 }}>
+            {photos.data ? `${photos.data.total} ${photos.data.total === 1 ? 'Erinnerung' : 'Erinnerungen'} zu dieser Fahrt` : 'Momente entlang deiner Strecke'}
+          </Typography>
+        </Box>
+        <Button variant="outlined" startIcon={<AddAPhotoRoundedIcon />} onClick={() => { upload.reset(); setUploadOpen(true) }}>
+          Foto hinzufügen
+        </Button>
+      </Stack>
+
+      {photos.isError && <ErrorState error={photos.error} onRetry={() => void photos.refetch()} />}
+      {photos.isLoading && (
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(3, 1fr)' }, gap: 1.5 }}>
+          {Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} variant="rounded" height={250} />)}
+        </Box>
+      )}
+      {photos.data && photos.data.items.length === 0 && (
+        <Card>
+          <EmptyState
+            title="Noch keine Fotos"
+            description="Füge Landschaften, Pausen oder besondere Streckenmomente mit optionalem Aufnahmeort hinzu."
+            action={<Button startIcon={<AddAPhotoRoundedIcon />} onClick={() => setUploadOpen(true)}>Erstes Foto hinzufügen</Button>}
+          />
+        </Card>
+      )}
+      {photos.data && photos.data.items.length > 0 && (
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', xl: 'repeat(3, 1fr)' }, gap: 1.5 }}>
+          {photos.data.items.map((photo) => (
+            <PhotoCard
+              key={photo.id}
+              photo={photo}
+              onOpen={() => setDetailPhoto(photo)}
+              onEdit={() => { update.reset(); setEditPhoto(photo) }}
+              onDelete={() => { remove.reset(); setDeletePhoto(photo) }}
+            />
+          ))}
+        </Box>
+      )}
+
+      {markers.length > 0 && trackPoints.length > 1 && (
+        <Card sx={{ mt: 1.5, overflow: 'hidden' }}>
+          <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+            <Stack direction="row" alignItems="center" gap={1}>
+              <LocationOnRoundedIcon color="primary" />
+              <Box>
+                <Typography variant="h4">Fotos auf der Strecke</Typography>
+                <Typography variant="body2" color="text.secondary">{markers.length} verortete {markers.length === 1 ? 'Aufnahme' : 'Aufnahmen'}</Typography>
+              </Box>
+            </Stack>
+          </CardContent>
+          <TrackMap points={trackPoints} markers={markers} height={{ xs: 280, md: 340 }} />
+        </Card>
+      )}
+
+      <PhotoMetadataDialog
+        mode="upload"
+        open={uploadOpen}
+        busy={upload.isPending}
+        error={upload.error}
+        onClose={() => setUploadOpen(false)}
+        onSubmit={(data) => upload.mutate(data as ActivityPhotoUpload)}
+      />
+      <PhotoMetadataDialog
+        mode="edit"
+        open={Boolean(editPhoto)}
+        photo={editPhoto}
+        busy={update.isPending}
+        error={update.error}
+        onClose={() => setEditPhoto(null)}
+        onSubmit={(data) => editPhoto && update.mutate({ photoId: editPhoto.id, data: data as ActivityPhotoUpdate })}
+      />
+
+      <Dialog open={Boolean(deletePhoto)} onClose={remove.isPending ? undefined : () => setDeletePhoto(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Foto löschen?</DialogTitle>
+        <DialogContent>
+          <Typography>Das Foto{deletePhoto?.caption ? ` „${deletePhoto.caption}“` : ''} wird dauerhaft entfernt.</Typography>
+          {remove.isError && <Alert severity="error" sx={{ mt: 2 }}>{errorMessage(remove.error)}</Alert>}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button color="inherit" onClick={() => setDeletePhoto(null)}>Abbrechen</Button>
+          <Button color="error" variant="contained" disabled={remove.isPending} onClick={() => deletePhoto && remove.mutate(deletePhoto.id)}>
+            {remove.isPending ? 'Wird gelöscht …' : 'Foto löschen'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={Boolean(detailPhoto)} onClose={() => setDetailPhoto(null)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ pr: 7 }}>{detailPhoto?.caption || 'Aktivitätsfoto'}</DialogTitle>
+        <IconButton aria-label="Ansicht schließen" onClick={() => setDetailPhoto(null)} sx={{ position: 'absolute', right: 12, top: 10 }}><CloseRoundedIcon /></IconButton>
+        <DialogContent sx={{ pt: 0 }}>
+          {detailPhoto && <AuthenticatedPhoto photo={detailPhoto} height="min(68vh, 720px)" contain />}
+          {detailPhoto && <PhotoMeta photo={detailPhoto} sx={{ mt: 1.5 }} />}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button startIcon={<EditRoundedIcon />} onClick={() => { setEditPhoto(detailPhoto); setDetailPhoto(null) }}>Metadaten bearbeiten</Button>
+          <Button color="error" startIcon={<DeleteOutlineRoundedIcon />} onClick={() => { setDeletePhoto(detailPhoto); setDetailPhoto(null) }}>Löschen</Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  )
+}
+
+function PhotoCard({ photo, onOpen, onEdit, onDelete }: { photo: ActivityPhoto; onOpen: () => void; onEdit: () => void; onDelete: () => void }) {
+  return (
+    <Card sx={{ overflow: 'hidden' }}>
+      <Box component="button" type="button" onClick={onOpen} sx={{ display: 'block', width: '100%', p: 0, border: 0, cursor: 'zoom-in', bgcolor: 'action.hover' }}>
+        <AuthenticatedPhoto photo={photo} height={230} />
+      </Box>
+      <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+        <Stack direction="row" justifyContent="space-between" gap={1} alignItems="flex-start">
+          <Box sx={{ minWidth: 0 }}>
+            <Typography fontWeight={750} noWrap>{photo.caption || photo.original_filename}</Typography>
+            <PhotoMeta photo={photo} />
+          </Box>
+          <Stack direction="row" sx={{ mt: -.75, mr: -.75 }}>
+            <Tooltip title="Metadaten bearbeiten"><IconButton aria-label="Fotometadaten bearbeiten" size="small" onClick={onEdit}><EditRoundedIcon fontSize="small" /></IconButton></Tooltip>
+            <Tooltip title="Foto löschen"><IconButton aria-label="Foto löschen" size="small" color="error" onClick={onDelete}><DeleteOutlineRoundedIcon fontSize="small" /></IconButton></Tooltip>
+          </Stack>
+        </Stack>
+      </CardContent>
+    </Card>
+  )
+}
+
+function AuthenticatedPhoto({ photo, height, contain = false }: { photo: ActivityPhoto; height: number | string; contain?: boolean }) {
+  const image = useQuery({
+    queryKey: ['activity-photo-file', photo.id, photo.updated_at],
+    queryFn: () => activityPhotosApi.file(photo),
+    staleTime: 55 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
+  })
+  const [source, setSource] = useState<string | null>(null)
+  useEffect(() => {
+    if (!image.data) return
+    const objectUrl = URL.createObjectURL(image.data)
+    setSource(objectUrl)
+    return () => {
+      URL.revokeObjectURL(objectUrl)
+      setSource(null)
+    }
+  }, [image.data])
+
+  if (image.isError) {
+    return <Stack alignItems="center" justifyContent="center" spacing={1} sx={{ height, color: 'text.secondary' }}><ImageNotSupportedRoundedIcon /><Typography variant="caption">Bild nicht verfügbar</Typography></Stack>
+  }
+  if (!source) return <Skeleton variant="rectangular" height={height} />
+  return <Box component="img" src={source} alt={photo.caption || photo.original_filename} sx={{ display: 'block', width: '100%', height, objectFit: contain ? 'contain' : 'cover', bgcolor: 'action.hover' }} />
+}
+
+function PhotoMeta({ photo, sx }: { photo: ActivityPhoto; sx?: object }) {
+  return (
+    <Stack direction="row" gap={1.25} flexWrap="wrap" sx={{ mt: .5, ...sx }}>
+      {photo.captured_at && <Stack direction="row" alignItems="center" gap={.4}><CalendarMonthRoundedIcon sx={{ fontSize: 15, color: 'text.secondary' }} /><Typography variant="caption" color="text.secondary">{formatDateTime(photo.captured_at)}</Typography></Stack>}
+      {photo.latitude != null && photo.longitude != null && <Stack direction="row" alignItems="center" gap={.4}><LocationOnRoundedIcon sx={{ fontSize: 15, color: 'text.secondary' }} /><Typography variant="caption" color="text.secondary">{photo.latitude.toFixed(5)}, {photo.longitude.toFixed(5)}</Typography></Stack>}
+    </Stack>
+  )
+}
+
+interface PhotoMetadataDialogProps {
+  mode: 'upload' | 'edit'
+  open: boolean
+  photo?: ActivityPhoto | null
+  busy: boolean
+  error: unknown
+  onClose: () => void
+  onSubmit: (data: ActivityPhotoUpload | ActivityPhotoUpdate) => void
+}
+
+function PhotoMetadataDialog({ mode, open, photo, busy, error, onClose, onSubmit }: PhotoMetadataDialogProps) {
+  const [file, setFile] = useState<File | null>(null)
+  const [caption, setCaption] = useState('')
+  const [capturedAt, setCapturedAt] = useState('')
+  const [latitude, setLatitude] = useState('')
+  const [longitude, setLongitude] = useState('')
+  const [validation, setValidation] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    setFile(null)
+    setCaption(photo?.caption ?? '')
+    setCapturedAt(localDateTimeValue(photo?.captured_at))
+    setLatitude(photo?.latitude == null ? '' : String(photo.latitude))
+    setLongitude(photo?.longitude == null ? '' : String(photo.longitude))
+    setValidation(null)
+  }, [open, photo])
+
+  function submit() {
+    setValidation(null)
+    if (mode === 'upload' && !file) return setValidation('Bitte wähle ein Foto aus.')
+    if (file && file.size > maximumPhotoBytes) return setValidation('Das Foto darf höchstens 15 MB groß sein.')
+    if (caption.length > 1000) return setValidation('Die Caption darf höchstens 1.000 Zeichen lang sein.')
+    if (Boolean(latitude) !== Boolean(longitude)) return setValidation('Bitte gib Breitengrad und Längengrad gemeinsam an.')
+    const latitudeNumber = latitude ? Number(latitude) : null
+    const longitudeNumber = longitude ? Number(longitude) : null
+    if (latitudeNumber != null && (!Number.isFinite(latitudeNumber) || latitudeNumber < -90 || latitudeNumber > 90)) return setValidation('Der Breitengrad muss zwischen −90 und 90 liegen.')
+    if (longitudeNumber != null && (!Number.isFinite(longitudeNumber) || longitudeNumber < -180 || longitudeNumber > 180)) return setValidation('Der Längengrad muss zwischen −180 und 180 liegen.')
+    const metadata: ActivityPhotoUpdate = {
+      caption: caption.trim() || null,
+      captured_at: capturedAtForApi(capturedAt),
+      latitude: latitudeNumber,
+      longitude: longitudeNumber,
+    }
+    onSubmit(mode === 'upload' ? { ...metadata, file: file! } : metadata)
+  }
+
+  return (
+    <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm">
+      <DialogTitle>{mode === 'upload' ? 'Foto hinzufügen' : 'Fotometadaten bearbeiten'}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          {mode === 'upload' && (
+            <Button component="label" variant={file ? 'outlined' : 'contained'} startIcon={<AddAPhotoRoundedIcon />}>
+              {file ? file.name : 'JPEG, PNG oder WebP auswählen'}
+              <Box component="input" hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={(event: React.ChangeEvent<HTMLInputElement>) => setFile(event.target.files?.[0] ?? null)} />
+            </Button>
+          )}
+          <TextField label="Caption" value={caption} onChange={(event) => setCaption(event.target.value)} multiline minRows={2} inputProps={{ maxLength: 1000 }} helperText={`${caption.length}/1.000 Zeichen`} />
+          <TextField label="Aufnahmezeit (optional)" type="datetime-local" value={capturedAt} onChange={(event) => setCapturedAt(event.target.value)} slotProps={{ inputLabel: { shrink: true } }} helperText="Wird mit deiner lokalen Zeitzone gespeichert." />
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+            <TextField label="Breitengrad (optional)" type="number" value={latitude} onChange={(event) => setLatitude(event.target.value)} inputProps={{ min: -90, max: 90, step: 'any' }} fullWidth />
+            <TextField label="Längengrad (optional)" type="number" value={longitude} onChange={(event) => setLongitude(event.target.value)} inputProps={{ min: -180, max: 180, step: 'any' }} fullWidth />
+          </Stack>
+          {(validation || Boolean(error)) && <Alert severity="error">{validation ?? errorMessage(error)}</Alert>}
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 3 }}>
+        <Button color="inherit" onClick={onClose}>Abbrechen</Button>
+        <Button variant="contained" disabled={busy} onClick={submit}>{busy ? 'Wird gespeichert …' : mode === 'upload' ? 'Foto hochladen' : 'Speichern'}</Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
