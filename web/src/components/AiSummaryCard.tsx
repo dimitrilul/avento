@@ -1,6 +1,6 @@
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded'
 import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded'
-import { Alert, Box, Button, Card, CardContent, Chip, Divider, Skeleton, Stack, Typography } from '@mui/material'
+import { Alert, alpha, Box, Button, Card, CardContent, Chip, Divider, Skeleton, Stack, Typography } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { activitiesApi, type AIDataBasis } from '../api'
 import { errorMessage, formatDateTime } from '../utils/format'
@@ -17,7 +17,7 @@ export function AiSummaryCard({ activityId, fallback, provider, dataBasis }: { a
   const activeProvider = query.data?.provider ?? provider
 
   return (
-    <Card sx={{ height: '100%', background: 'radial-gradient(circle at 100% 0, rgba(165,200,56,.18), transparent 32%), linear-gradient(145deg, #F3FAF5, #FFFFFF)' }}>
+    <Card sx={{ height: '100%', background: (theme) => `radial-gradient(circle at 100% 0, ${alpha(theme.palette.secondary.main, .18)}, transparent 32%), linear-gradient(145deg, ${alpha(theme.palette.primary.main, .07)}, ${theme.palette.background.paper})` }}>
       <CardContent sx={{ p: 2.5 }}>
         <Stack direction="row" alignItems="flex-start" justifyContent="space-between" gap={2}>
           <Stack direction="row" spacing={1.25} alignItems="center">

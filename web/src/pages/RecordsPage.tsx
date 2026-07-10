@@ -96,8 +96,9 @@ export function RecordsPage() {
 }
 
 function ActivityRecordCard({ title, icon, record, primaryValue, secondaryValue, accent }: { title: string; icon: React.ReactNode; record: ActivityRecord | null; primaryValue: string; secondaryValue?: string; accent: string }) {
+  const theme = useTheme()
   return (
-    <Card sx={{ overflow: 'hidden', background: `linear-gradient(140deg, ${alpha(accent, .14)}, rgba(255,255,255,.96) 60%)` }}>
+    <Card sx={{ overflow: 'hidden', background: `linear-gradient(140deg, ${alpha(accent, .14)}, ${theme.palette.background.paper} 60%)` }}>
       <CardContent sx={{ p: { xs: 2.5, sm: 3 }, '&:last-child': { pb: { xs: 2.5, sm: 3 } } }}>
         <Stack direction="row" justifyContent="space-between" alignItems="flex-start" gap={2}>
           <Box>

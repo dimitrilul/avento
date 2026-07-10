@@ -133,7 +133,7 @@ export function DevelopmentPage() {
               </CardContent>
             </Card>
 
-            <Card sx={{ background: `linear-gradient(145deg, ${alpha(theme.palette.primary.main, .13)}, rgba(255,255,255,.98) 70%)` }}>
+            <Card sx={{ background: `linear-gradient(145deg, ${alpha(theme.palette.primary.main, .13)}, ${theme.palette.background.paper} 70%)` }}>
               <CardContent sx={{ p: 2.5 }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="flex-start" gap={1}>
                   <Box><Typography variant="overline" color="primary.main" fontWeight={800}>FITNESSTREND</Typography><Typography variant="h3" sx={{ mt: .25 }}>{fitnessStatusLabel(insights.data.fitness_trend.status)}</Typography></Box>

@@ -152,7 +152,7 @@ export function ComparePage() {
 
       {result.length > 0 && (
         <Box sx={{ mt: 4 }}>
-          <Card sx={{ mb: 2.5, background: 'radial-gradient(circle at 100% 0, rgba(165,200,56,.22), transparent 34%), linear-gradient(145deg, #F3FAF5, #FFFFFF)' }}>
+          <Card sx={{ mb: 2.5, background: `radial-gradient(circle at 100% 0, ${alpha(theme.palette.secondary.main, .22)}, transparent 34%), linear-gradient(145deg, ${alpha(theme.palette.primary.main, .07)}, ${theme.palette.background.paper})` }}>
             <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
               <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" gap={2}>
                 <Stack direction="row" spacing={1.25} alignItems="center">

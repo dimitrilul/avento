@@ -4,12 +4,16 @@ import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded'
 import { Box, Chip, Stack, Typography } from '@mui/material'
 import { Outlet } from 'react-router-dom'
 import { Brand } from '../components/Brand'
+import { ThemeModeToggle } from '../components/ThemeModeToggle'
 
 export function AuthLayout() {
   return (
     <Box sx={{ minHeight: '100vh', display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(360px, .9fr) minmax(460px, 1.1fr)' } }}>
       <Box sx={{ p: { xs: 2.5, sm: 5, lg: 7 }, display: 'flex', flexDirection: 'column', bgcolor: 'background.paper' }}>
-        <Brand />
+        <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <Brand />
+          <ThemeModeToggle />
+        </Stack>
         <Box sx={{ width: '100%', maxWidth: 460, m: 'auto', py: 5 }}>
           <Outlet />
         </Box>

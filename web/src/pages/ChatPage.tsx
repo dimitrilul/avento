@@ -121,7 +121,7 @@ export function ChatPage() {
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1fr) 320px' }, gap: 2.5, alignItems: 'start' }}>
         <Card sx={{ overflow: 'hidden' }}>
-          <Box sx={{ height: { xs: 'min(58vh, 600px)', md: 'min(64vh, 680px)' }, minHeight: 430, overflowY: 'auto', p: { xs: 2, sm: 3 }, bgcolor: 'rgba(245,247,243,.55)' }} aria-live="polite">
+          <Box sx={{ height: { xs: 'min(58vh, 600px)', md: 'min(64vh, 680px)' }, minHeight: 430, overflowY: 'auto', p: { xs: 2, sm: 3 }, bgcolor: 'rgba(var(--mui-palette-background-defaultChannel) / .55)' }} aria-live="polite">
             <Stack spacing={2.25}>
               {messages.map((message) => <ChatBubble key={message.id} message={message} profileName={profile?.display_name} avatar={profile?.avatar_data_url} />)}
               {chat.isPending && (

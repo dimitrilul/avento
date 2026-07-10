@@ -29,6 +29,7 @@ import {
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { Brand } from '../components/Brand'
+import { ThemeModeToggle } from '../components/ThemeModeToggle'
 import { UploadDialog } from '../components/UploadDialog'
 
 const drawerWidth = 248
@@ -126,12 +127,13 @@ export function AppShell() {
         position="fixed"
         color="inherit"
         elevation={0}
-        sx={{ width: { lg: `calc(100% - ${drawerWidth}px)` }, ml: { lg: `${drawerWidth}px` }, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'rgba(255,255,255,.88)', backdropFilter: 'blur(16px)' }}
+        sx={{ width: { lg: `calc(100% - ${drawerWidth}px)` }, ml: { lg: `${drawerWidth}px` }, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'rgba(var(--mui-palette-background-paperChannel) / .88)', backdropFilter: 'blur(16px)' }}
       >
         <Toolbar sx={{ gap: 1.5 }}>
           {!desktop && <IconButton aria-label="Menü öffnen" onClick={() => setDrawerOpen(true)}><MenuRoundedIcon /></IconButton>}
           {!desktop && <Brand compact />}
           <Box sx={{ flex: 1 }} />
+          <ThemeModeToggle />
           <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => setUploadOpen(true)}>
             <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Aktivität </Box>importieren
           </Button>

@@ -3,7 +3,7 @@ import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded'
 import ThermostatRoundedIcon from '@mui/icons-material/ThermostatRounded'
 import WaterDropRoundedIcon from '@mui/icons-material/WaterDropRounded'
 import WbSunnyRoundedIcon from '@mui/icons-material/WbSunnyRounded'
-import { Alert, Button, Card, CardContent, Chip, Divider, Skeleton, Stack, Typography } from '@mui/material'
+import { Alert, alpha, Button, Card, CardContent, Chip, Divider, Skeleton, Stack, Typography } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { activitiesApi, type WeatherData } from '../api'
 import { errorMessage, formatDateTime } from '../utils/format'
@@ -28,7 +28,7 @@ export function WeatherCard({ activityId, fallback }: { activityId: string; fall
   const netHeadwind = typeof routeWind?.net_headwind_kmh === 'number' ? routeWind.net_headwind_kmh : null
 
   return (
-    <Card sx={{ height: '100%', background: 'linear-gradient(150deg, #F8FBFF, #FFFFFF)' }}>
+    <Card sx={{ height: '100%', background: (theme) => `linear-gradient(150deg, ${alpha(theme.palette.chart.blue, .08)}, ${theme.palette.background.paper})` }}>
       <CardContent sx={{ p: 2.5 }}>
         <Stack direction="row" alignItems="flex-start" justifyContent="space-between" gap={2}>
           <Stack direction="row" spacing={1.25} alignItems="center">

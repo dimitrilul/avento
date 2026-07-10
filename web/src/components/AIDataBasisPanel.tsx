@@ -80,7 +80,7 @@ export function AIDataBasisPanel({
         border: '1px solid',
         borderColor: 'divider',
         borderRadius: '14px !important',
-        bgcolor: 'rgba(255,255,255,.72)',
+        bgcolor: 'rgba(var(--mui-palette-background-paperChannel) / .72)',
         boxShadow: 'none',
         overflow: 'hidden',
         '&::before': { display: 'none' },
