@@ -5,6 +5,15 @@
 		reverse_proxy backend:8000
 	}
 
+	# MCP OAuth discovery and authorization endpoints are served by FastAPI.
+	handle /.well-known/* {
+		reverse_proxy backend:8000
+	}
+
+	handle /oauth/* {
+		reverse_proxy backend:8000
+	}
+
 	handle /health {
 		reverse_proxy backend:8000
 	}

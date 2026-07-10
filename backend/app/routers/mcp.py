@@ -98,13 +98,16 @@ def _require_admin(current_user: User = Depends(get_current_user)) -> User:
 
 def _request_origin(request: Request) -> str:
     settings = get_settings()
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip()
+    forwarded_host = request.headers.get("x-forwarded-host", "").split(",", 1)[0].strip()
+    if forwarded_host:
+        scheme = forwarded_proto or request.url.scheme
+        return f"{scheme}://{forwarded_host}".rstrip("/")
     configured = (settings.public_url or "").strip().rstrip("/")
     if configured:
         return configured
-    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip()
-    forwarded_host = request.headers.get("x-forwarded-host", "").split(",", 1)[0].strip()
     scheme = forwarded_proto or request.url.scheme
-    host = forwarded_host or request.headers.get("host") or request.url.netloc
+    host = request.headers.get("host") or request.url.netloc
     return f"{scheme}://{host}".rstrip("/")
 
 
