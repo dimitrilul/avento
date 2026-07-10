@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import json
 from time import perf_counter
-from typing import Annotated, Any
+from typing import Annotated, Any, Mapping
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -13,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..deps import get_current_user
+from ..config import get_settings
 from ..mcp_models import (
     MCP_SCOPES,
     McpAccessTokenRequest,
@@ -41,6 +43,20 @@ from ..mcp_security import (
     mcp_origin_allowed,
     revoke_client_tokens,
     utcnow,
+)
+from ..mcp_oauth import (
+    OAuthClientRegistrationRequest,
+    OAuthRequestError,
+    authorization_form,
+    create_authorization_code,
+    exchange_authorization_code,
+    get_oauth_client,
+    oauth_www_authenticate,
+    refresh_oauth_token,
+    register_oauth_client,
+    scope_string,
+    user_from_password,
+    validate_authorization_request,
 )
 from ..mcp_service import (
     McpToolError,
@@ -78,6 +94,261 @@ def _require_admin(current_user: User = Depends(get_current_user)) -> User:
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Administratorrechte erforderlich.")
     return current_user
+
+
+def _request_origin(request: Request) -> str:
+    settings = get_settings()
+    configured = (settings.public_url or "").strip().rstrip("/")
+    if configured:
+        return configured
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip()
+    forwarded_host = request.headers.get("x-forwarded-host", "").split(",", 1)[0].strip()
+    scheme = forwarded_proto or request.url.scheme
+    host = forwarded_host or request.headers.get("host") or request.url.netloc
+    return f"{scheme}://{host}".rstrip("/")
+
+
+def _mcp_resource_uri(request: Request) -> str:
+    configured = (get_settings().mcp_resource_uri or "").strip().rstrip("/")
+    return configured or f"{_request_origin(request)}{RPC_PATH}"
+
+
+def _oauth_metadata(request: Request) -> dict[str, object]:
+    origin = _request_origin(request)
+    return {
+        "issuer": origin,
+        "authorization_endpoint": f"{origin}/oauth/authorize",
+        "token_endpoint": f"{origin}/oauth/token",
+        "registration_endpoint": f"{origin}/oauth/register",
+        "response_types_supported": ["code"],
+        "response_modes_supported": ["query"],
+        "grant_types_supported": ["authorization_code", "refresh_token"],
+        "code_challenge_methods_supported": ["S256"],
+        "token_endpoint_auth_methods_supported": ["none"],
+        "scopes_supported": list(MCP_SCOPES),
+    }
+
+
+def _protected_resource_metadata(request: Request) -> dict[str, object]:
+    origin = _request_origin(request)
+    return {
+        "resource": _mcp_resource_uri(request),
+        "authorization_servers": [origin],
+        "scopes_supported": list(MCP_SCOPES),
+        "bearer_methods_supported": ["header"],
+    }
+
+
+@router.get(
+    "/.well-known/oauth-protected-resource",
+    include_in_schema=False,
+)
+@router.get(
+    "/.well-known/oauth-protected-resource/api/v1/mcp/rpc",
+    include_in_schema=False,
+)
+@router.get(
+    "/api/v1/mcp/.well-known/oauth-protected-resource",
+    include_in_schema=False,
+)
+def oauth_protected_resource_metadata(request: Request) -> JSONResponse:
+    return JSONResponse(_protected_resource_metadata(request), headers=NO_STORE_HEADERS)
+
+
+@router.get("/.well-known/oauth-authorization-server", include_in_schema=False)
+@router.get("/api/v1/mcp/.well-known/oauth-authorization-server", include_in_schema=False)
+def oauth_authorization_server_metadata(request: Request) -> JSONResponse:
+    return JSONResponse(_oauth_metadata(request), headers=NO_STORE_HEADERS)
+
+
+def _oauth_error_response(error: OAuthRequestError) -> JSONResponse:
+    return JSONResponse(
+        status_code=error.status_code,
+        content={"error": error.code, "error_description": error.description},
+        headers=NO_STORE_HEADERS,
+    )
+
+
+def _redirect_with_params(uri: str, params: dict[str, str]) -> RedirectResponse:
+    parsed = urlsplit(uri)
+    query = parse_qsl(parsed.query, keep_blank_values=True)
+    query.extend(params.items())
+    target = urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(query), ""))
+    return RedirectResponse(target, status_code=status.HTTP_302_FOUND)
+
+
+def _oauth_authorization_params(values: Mapping[str, object]) -> dict[str, str]:
+    allowed = (
+        "response_type",
+        "client_id",
+        "redirect_uri",
+        "scope",
+        "state",
+        "code_challenge",
+        "code_challenge_method",
+        "resource",
+    )
+    return {
+        key: str(values[key])
+        for key in allowed
+        if values.get(key) is not None and str(values[key]) != ""
+    }
+
+
+@router.post("/oauth/register", status_code=status.HTTP_201_CREATED, include_in_schema=False)
+async def oauth_register(request: Request, db: Session = Depends(get_db)) -> JSONResponse:
+    if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/json":
+        return _oauth_error_response(OAuthRequestError("invalid_client_metadata", "JSON-Anfrage erforderlich."))
+    try:
+        payload = OAuthClientRegistrationRequest.model_validate(await request.json())
+        client = register_oauth_client(db, payload)
+    except (ValidationError, ValueError) as exc:
+        return _oauth_error_response(OAuthRequestError("invalid_client_metadata", str(exc)))
+    except OAuthRequestError as exc:
+        return _oauth_error_response(exc)
+    return JSONResponse(
+        status_code=status.HTTP_201_CREATED,
+        content={
+            "client_id": client.client_id,
+            "client_id_issued_at": int(client.created_at.timestamp()),
+            "client_name": client.client_name,
+            "redirect_uris": list(client.redirect_uris or []),
+            "grant_types": ["authorization_code", "refresh_token"],
+            "response_types": ["code"],
+            "token_endpoint_auth_method": "none",
+            "scope": scope_string(MCP_SCOPES),
+        },
+        headers=NO_STORE_HEADERS,
+    )
+
+
+async def _authorize_request(
+    request: Request,
+    db: Session,
+    values: Mapping[str, object],
+) -> Response:
+    params = _oauth_authorization_params(values)
+    expected_resource = _mcp_resource_uri(request)
+    try:
+        client, scopes, resource = validate_authorization_request(
+            db,
+            response_type=params.get("response_type"),
+            client_id=params.get("client_id"),
+            redirect_uri=params.get("redirect_uri"),
+            scope=params.get("scope"),
+            code_challenge=params.get("code_challenge"),
+            code_challenge_method=params.get("code_challenge_method"),
+            resource=params.get("resource"),
+            expected_resource=expected_resource,
+        )
+    except OAuthRequestError as exc:
+        # Redirect errors only after the client and exact redirect URI have been validated.
+        redirect_uri = params.get("redirect_uri")
+        client_id = params.get("client_id")
+        if redirect_uri and client_id:
+            try:
+                known_client = get_oauth_client(db, client_id)
+                if redirect_uri in set(known_client.redirect_uris or []):
+                    redirect_params = {"error": exc.code, "error_description": exc.description}
+                    if params.get("state"):
+                        redirect_params["state"] = params["state"]
+                    return _redirect_with_params(redirect_uri, redirect_params)
+            except OAuthRequestError:
+                pass
+        return _oauth_error_response(exc)
+
+    params["resource"] = resource
+    if request.method == "GET":
+        return HTMLResponse(
+            authorization_form(
+                action="/oauth/authorize",
+                params=params,
+                client_name=client.client_name,
+                scopes=scopes,
+            )
+        )
+
+    form = await request.form()
+    decision = str(form.get("decision", ""))
+    if decision != "allow":
+        redirect_params = {"error": "access_denied", "error_description": "Der Zugriff wurde abgelehnt."}
+        if params.get("state"):
+            redirect_params["state"] = params["state"]
+        return _redirect_with_params(params["redirect_uri"], redirect_params)
+    user = user_from_password(db, str(form.get("email", "")), str(form.get("password", "")))
+    if user is None:
+        return HTMLResponse(
+            authorization_form(
+                action="/oauth/authorize",
+                params=params,
+                client_name=client.client_name,
+                scopes=scopes,
+                error="E-Mail-Adresse oder Passwort ist falsch.",
+            ),
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
+    code = create_authorization_code(
+        db,
+        client=client,
+        user=user,
+        redirect_uri=params["redirect_uri"],
+        code_challenge=params["code_challenge"],
+        scopes=scopes,
+        resource=resource,
+    )
+    redirect_params = {"code": code}
+    if params.get("state"):
+        redirect_params["state"] = params["state"]
+    return _redirect_with_params(params["redirect_uri"], redirect_params)
+
+
+@router.get("/oauth/authorize", include_in_schema=False)
+async def oauth_authorize_get(request: Request, db: Session = Depends(get_db)) -> Response:
+    return await _authorize_request(request, db, request.query_params)
+
+
+@router.post("/oauth/authorize", include_in_schema=False)
+async def oauth_authorize_post(request: Request, db: Session = Depends(get_db)) -> Response:
+    form = await request.form()
+    return await _authorize_request(request, db, form)
+
+
+@router.post("/oauth/token", include_in_schema=False)
+async def oauth_token(request: Request, db: Session = Depends(get_db)) -> JSONResponse:
+    if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/x-www-form-urlencoded":
+        return _oauth_error_response(OAuthRequestError("invalid_request", "Formulardaten erforderlich."))
+    form = await request.form()
+    values = {key: str(value) for key, value in form.items()}
+    client_id = values.get("client_id")
+    if not client_id:
+        return _oauth_error_response(OAuthRequestError("invalid_client", "client_id ist erforderlich.", status_code=401))
+    try:
+        resource = values.get("resource")
+        expected_resource = _mcp_resource_uri(request)
+        if values.get("grant_type") == "authorization_code":
+            result = exchange_authorization_code(
+                db,
+                client_id=client_id,
+                code_value=values.get("code", ""),
+                redirect_uri=values.get("redirect_uri", ""),
+                code_verifier=values.get("code_verifier", ""),
+                resource=resource,
+                expected_resource=expected_resource,
+            )
+        elif values.get("grant_type") == "refresh_token":
+            result = refresh_oauth_token(
+                db,
+                client_id=client_id,
+                refresh_value=values.get("refresh_token", ""),
+                scope=values.get("scope"),
+                resource=resource,
+                expected_resource=expected_resource,
+            )
+        else:
+            raise OAuthRequestError("unsupported_grant_type", "Dieser Grant-Typ wird nicht unterstützt.")
+    except OAuthRequestError as exc:
+        return _oauth_error_response(exc)
+    return JSONResponse(result, headers=NO_STORE_HEADERS)
 
 
 def _client_response(client: McpClient) -> McpClientResponse:
@@ -423,7 +694,14 @@ def _identify_rpc_client(
     request: Request, db: Session
 ) -> tuple[McpPrincipal | None, McpAuthenticationError | None]:
     try:
-        return authenticate_mcp_bearer(db, request.headers.get("authorization")), None
+        return (
+            authenticate_mcp_bearer(
+                db,
+                request.headers.get("authorization"),
+                expected_resource=_mcp_resource_uri(request),
+            ),
+            None,
+        )
     except McpAuthenticationError as exc:
         return None, exc
 
@@ -466,7 +744,10 @@ def _transport_rejection(
         )
         return Response(
             status_code=401,
-            headers={**NO_STORE_HEADERS, "WWW-Authenticate": "Bearer"},
+            headers={
+                **NO_STORE_HEADERS,
+                "WWW-Authenticate": oauth_www_authenticate(_request_origin(request)),
+            },
         )
     _write_rpc_audit(
         db,
@@ -540,7 +821,10 @@ async def mcp_rpc(request: Request, db: Session = Depends(get_db)) -> Response:
                 "id": None,
                 "error": {"code": -32001, "message": "Authentifizierung erforderlich."},
             },
-            headers={**RPC_HEADERS, "WWW-Authenticate": "Bearer"},
+            headers={
+                **RPC_HEADERS,
+                "WWW-Authenticate": oauth_www_authenticate(_request_origin(request)),
+            },
         )
 
     media_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()

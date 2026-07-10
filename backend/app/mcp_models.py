@@ -73,6 +73,70 @@ class McpAccessToken(Base):
     client: Mapped[McpClient] = relationship(back_populates="access_tokens")
 
 
+class McpOAuthClient(Base):
+    __tablename__ = "mcp_oauth_clients"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid4_str)
+    client_id: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    client_name: Mapped[str] = mapped_column(String(120))
+    redirect_uris: Mapped[list[str]] = mapped_column(JSON, default=list)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class McpOAuthAuthorizationCode(Base):
+    __tablename__ = "mcp_oauth_authorization_codes"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid4_str)
+    code_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    client_pk: Mapped[str] = mapped_column(
+        ForeignKey("mcp_oauth_clients.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    redirect_uri: Mapped[str] = mapped_column(String(2048))
+    code_challenge: Mapped[str] = mapped_column(String(128))
+    code_challenge_method: Mapped[str] = mapped_column(String(16))
+    scopes: Mapped[list[str]] = mapped_column(JSON, default=list)
+    resource: Mapped[str] = mapped_column(String(2048))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class McpOAuthAccessToken(Base):
+    __tablename__ = "mcp_oauth_access_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid4_str)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    client_pk: Mapped[str] = mapped_column(
+        ForeignKey("mcp_oauth_clients.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    scopes: Mapped[list[str]] = mapped_column(JSON, default=list)
+    resource: Mapped[str] = mapped_column(String(2048))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class McpOAuthRefreshToken(Base):
+    __tablename__ = "mcp_oauth_refresh_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid4_str)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    client_pk: Mapped[str] = mapped_column(
+        ForeignKey("mcp_oauth_clients.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    scopes: Mapped[list[str]] = mapped_column(JSON, default=list)
+    resource: Mapped[str] = mapped_column(String(2048))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
 class McpAuditLog(Base):
     __tablename__ = "mcp_audit_logs"
     __table_args__ = (

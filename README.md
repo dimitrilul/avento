@@ -47,11 +47,23 @@ Einschränkungen.
 
 ## Read-only-MCP
 
-Administratoren verwalten MCP-Clients in der Web-App unter
-`/administration/mcp`. Ein Client erhält granulare Leserechte, ein nur einmal
-angezeigtes Secret und daraus erzeugte, höchstens 15 Minuten gültige
-Zugriffstokens. Secrets und Tokens werden ausschließlich gehasht gespeichert;
-jede MCP-Anfrage landet ohne Roh-Tokens oder Secrets im Audit-Log.
+Der Read-only-MCP unterstützt für entfernte HTTP-Clients jetzt OAuth 2.1 mit
+Authorization Code, PKCE und automatisch rotierenden Refresh-Tokens. MCP-
+Clients entdecken die Endpunkte über die OAuth-Metadaten und registrieren sich
+bei Bedarf dynamisch; ein manuell kopiertes Client-Secret ist nicht mehr nötig.
+Beim ersten Verbinden öffnet sich der Avento-Login mit einer Scope-Freigabe.
+
+Der Streamable-HTTP-Endpunkt lautet `/api/v1/mcp/rpc`. Die Protected-Resource-
+Metadaten liegen unter `/.well-known/oauth-protected-resource`; die OAuth-
+Server-Metadaten liegen unter `/.well-known/oauth-authorization-server`.
+`PUBLIC_URL` muss deshalb auf die von MCP-Clients erreichbare HTTPS-Adresse
+zeigen. Für abweichende Setups kann `MCP_RESOURCE_URI` gesetzt werden.
+
+Der bisherige Secret-Flow bleibt als Übergang für bereits eingerichtete Clients
+erhalten. Administratoren verwalten diese Legacy-Clients weiterhin unter
+`/administration/mcp`; ihre Secrets und Tokens werden ausschließlich gehasht
+gespeichert und jede MCP-Anfrage landet ohne Roh-Tokens oder Secrets im
+Audit-Log.
 
 Der Streamable-HTTP-Endpunkt lautet `/api/v1/mcp/rpc`. Codex kann ihn
 beispielsweise mit einem Token aus einer Umgebungsvariable verwenden:
@@ -59,7 +71,8 @@ beispielsweise mit einem Token aus einer Umgebungsvariable verwenden:
 ```toml
 [mcp_servers.avento]
 url = "http://localhost/api/v1/mcp/rpc"
-bearer_token_env_var = "AVENTO_MCP_TOKEN"
+# OAuth-fähige MCP-Clients starten die Anmeldung automatisch.
+# Für einen Legacy-Client bleibt bearer_token_env_var möglich.
 ```
 
 Für einen ausschließlich lokal erreichbaren MCP-Prozess kann im

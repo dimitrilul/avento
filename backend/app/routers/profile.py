@@ -15,6 +15,7 @@ from ..config import get_settings
 from ..database import get_db
 from ..deps import get_current_user
 from ..models import Activity, RefreshToken, User, utcnow
+from ..mcp_security import revoke_oauth_user_tokens
 from ..schemas import ProfilePasswordChange, ProfileResponse, ProfileUpdate
 from ..security import hash_password, verify_password
 from ..tcx import default_hr_zones
@@ -179,5 +180,6 @@ def change_password(
         .where(RefreshToken.user_id == current_user.id, RefreshToken.revoked_at.is_(None))
         .values(revoked_at=now)
     )
+    revoke_oauth_user_tokens(db, current_user.id, when=now)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

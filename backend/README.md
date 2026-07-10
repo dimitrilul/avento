@@ -44,10 +44,17 @@ Statistik-API stellt persönliche Distanzrekorde, langfristige Kalendertrends,
 robuste Muster und Saison- beziehungsweise Jahresrückblicke bereit. KI-Texte
 enthalten zusätzlich eine strukturierte Datengrundlage.
 
-Der Read-only-MCP-Server ist unter `/api/v1/mcp/rpc` erreichbar. MCP-Clients,
-Scopes, kurzlebige Zugriffstokens und das Audit-Log werden über die
-authentifizierten `/api/v1/mcp/*`-Endpunkte verwaltet. Optional startet
-`python mcp_server.py` denselben Router nur auf der lokalen Loopback-Adresse.
+Der Read-only-MCP-Server ist unter `/api/v1/mcp/rpc` erreichbar. Für HTTP-
+Clients stellt er OAuth 2.1 mit Authorization Code, PKCE, Dynamic Client
+Registration und rotierenden Refresh-Tokens bereit. Die Discovery-Endpunkte
+sind `/.well-known/oauth-protected-resource` und
+`/.well-known/oauth-authorization-server`. `AVENTO_PUBLIC_URL` muss auf die
+öffentliche HTTPS-Adresse zeigen; `AVENTO_MCP_RESOURCE_URI` überschreibt bei
+Bedarf die kanonische MCP-Resource-URI.
+
+Der bisherige Admin-verwaltete Client-Credentials-Flow bleibt für die Migration
+unter `/api/v1/mcp/token` erhalten. Optional startet `python mcp_server.py`
+denselben Router nur auf der lokalen Loopback-Adresse.
 
 Kalenderzeiträume werden in `AVENTO_TIMEZONE` ausgewertet (Standard: `Europe/Berlin`), sodass Fahrten rund um
 Mitternacht im richtigen lokalen Tag, in der richtigen Woche und im richtigen Monat landen.

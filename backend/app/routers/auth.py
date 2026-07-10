@@ -24,6 +24,7 @@ from ..schemas import (
     RegisterRequest,
     TokenResponse,
 )
+from ..mcp_security import revoke_oauth_user_tokens
 from ..security import create_access_token, generate_opaque_token, hash_password, token_hash, verify_password
 from ..tcx import default_hr_zones
 
@@ -214,5 +215,6 @@ def reset_password(payload: PasswordResetRequest, db: Session = Depends(get_db))
         .where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))
         .values(revoked_at=now)
     )
+    revoke_oauth_user_tokens(db, user.id, when=now)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

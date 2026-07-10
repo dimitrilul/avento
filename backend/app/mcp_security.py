@@ -14,8 +14,17 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
 
 from .config import get_settings
-from .mcp_models import MCP_SCOPES, McpAccessToken, McpAuditLog, McpClient
+from .mcp_models import (
+    MCP_SCOPES,
+    McpAccessToken,
+    McpAuditLog,
+    McpClient,
+    McpOAuthAccessToken,
+    McpOAuthClient,
+    McpOAuthRefreshToken,
+)
 from .models import User
+from .security import token_hash
 
 
 MCP_TOKEN_TTL_DEFAULT_MINUTES = 10
@@ -147,7 +156,7 @@ def mcp_origin_allowed(origin: str | None) -> bool:
 
 @dataclass(frozen=True)
 class McpPrincipal:
-    client_pk: str
+    client_pk: str | None
     client_id: str
     owner_user_id: str
     token_pk: str
@@ -183,14 +192,50 @@ def authenticate_mcp_bearer(
     authorization: str | None,
     *,
     touch: bool = True,
+    expected_resource: str | None = None,
 ) -> McpPrincipal:
     if not authorization or len(authorization) > 768:
         raise McpAuthenticationError("missing_token" if not authorization else "invalid_token")
     scheme, separator, raw_token = authorization.partition(" ")
     if separator != " " or scheme.lower() != "bearer" or not raw_token or " " in raw_token:
         raise McpAuthenticationError("invalid_token")
-    if not raw_token.startswith("avmcp_at_") or not 32 <= len(raw_token) <= 512:
+    if not raw_token.startswith(("avmcp_at_", "avmcp_oauth_at_")) or not 32 <= len(raw_token) <= 512:
         raise McpAuthenticationError("invalid_token")
+
+    if raw_token.startswith("avmcp_oauth_at_"):
+        oauth_token = db.scalar(
+            select(McpOAuthAccessToken).where(
+                McpOAuthAccessToken.token_hash == token_hash(raw_token)
+            )
+        )
+        if oauth_token is None:
+            raise McpAuthenticationError("invalid_token")
+        oauth_client = db.get(McpOAuthClient, oauth_token.client_pk)
+        if oauth_client is None:
+            raise McpAuthenticationError("invalid_token")
+        now = utcnow()
+        principal = McpPrincipal(
+            client_pk=None,
+            client_id=oauth_client.client_id,
+            owner_user_id=oauth_token.user_id,
+            token_pk=oauth_token.id,
+            scopes=tuple(
+                scope for scope in MCP_SCOPES if scope in set(oauth_token.scopes or [])
+            ),
+        )
+        if oauth_token.revoked_at is not None:
+            raise McpAuthenticationError("revoked_token", principal)
+        if aware_utc(oauth_token.expires_at) <= now:
+            raise McpAuthenticationError("expired_token", principal)
+        if expected_resource is not None and oauth_token.resource != expected_resource:
+            raise McpAuthenticationError("invalid_token", principal)
+        if not oauth_client.is_active:
+            raise McpAuthenticationError("inactive_client", principal)
+        if db.scalar(select(User.id).where(User.id == oauth_token.user_id)) is None:
+            raise McpAuthenticationError("inactive_client", principal)
+        if touch:
+            oauth_token.last_used_at = now
+        return principal
 
     token = db.scalar(
         select(McpAccessToken)
@@ -260,6 +305,16 @@ def revoke_client_tokens(db: Session, client_pk: str, *, when: datetime | None =
         .where(McpAccessToken.client_pk == client_pk, McpAccessToken.revoked_at.is_(None))
         .values(revoked_at=revoked_at)
     )
+
+
+def revoke_oauth_user_tokens(db: Session, user_id: str, *, when: datetime | None = None) -> None:
+    revoked_at = when or utcnow()
+    for model in (McpOAuthAccessToken, McpOAuthRefreshToken):
+        db.execute(
+            update(model)
+            .where(model.user_id == user_id, model.revoked_at.is_(None))
+            .values(revoked_at=revoked_at)
+        )
 
 
 def _request_id_hash(request_id: object) -> str | None:
