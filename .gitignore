@@ -1,0 +1,36 @@
+# Environment and secrets
+.env
+**/.env
+!**/.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+*.db
+
+# JavaScript
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Android / Gradle
+.gradle/
+**/build/
+local.properties
+*.jks
+*.keystore
+
+# IDE and operating system
+.idea/
+.vscode/
+.DS_Store
+
+# Runtime data
+data/
+uploads/
+backups/

@@ -1,0 +1,128 @@
+import { useState } from 'react'
+import AddRoundedIcon from '@mui/icons-material/AddRounded'
+import BarChartRoundedIcon from '@mui/icons-material/BarChartRounded'
+import CompareArrowsRoundedIcon from '@mui/icons-material/CompareArrowsRounded'
+import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded'
+import DirectionsBikeRoundedIcon from '@mui/icons-material/DirectionsBikeRounded'
+import MenuRoundedIcon from '@mui/icons-material/MenuRounded'
+import PersonRoundedIcon from '@mui/icons-material/PersonRounded'
+import {
+  AppBar,
+  Avatar,
+  Box,
+  Button,
+  Drawer,
+  IconButton,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Toolbar,
+  Typography,
+  useMediaQuery,
+  useTheme,
+} from '@mui/material'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
+import { Brand } from '../components/Brand'
+import { UploadDialog } from '../components/UploadDialog'
+
+const drawerWidth = 248
+const nav = [
+  { label: 'Übersicht', path: '/', icon: <DashboardRoundedIcon /> },
+  { label: 'Aktivitäten', path: '/aktivitaeten', icon: <DirectionsBikeRoundedIcon /> },
+  { label: 'Statistiken', path: '/statistiken', icon: <BarChartRoundedIcon /> },
+  { label: 'Vergleich', path: '/vergleich', icon: <CompareArrowsRoundedIcon /> },
+]
+
+export interface ShellOutletContext {
+  openImport: () => void
+}
+
+function Navigation({ onNavigate }: { onNavigate?: () => void }) {
+  const { profile } = useAuth()
+  const location = useLocation()
+  return (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 2 }}>
+      <Box sx={{ px: 1, py: 1.25, mb: 3 }}><Brand /></Box>
+      <List sx={{ display: 'grid', gap: 0.5 }}>
+        {nav.map((item) => {
+          const selected = item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path)
+          return (
+            <ListItemButton
+              key={item.path}
+              component={NavLink}
+              to={item.path}
+              selected={selected}
+              onClick={onNavigate}
+              sx={{ borderRadius: 3, minHeight: 48, '&.Mui-selected': { bgcolor: 'primary.main', color: 'primary.contrastText', '&:hover': { bgcolor: 'primary.dark' }, '& .MuiListItemIcon-root': { color: 'inherit' } } }}
+            >
+              <ListItemIcon sx={{ minWidth: 42 }}>{item.icon}</ListItemIcon>
+              <ListItemText primary={item.label} primaryTypographyProps={{ fontWeight: 700 }} />
+            </ListItemButton>
+          )
+        })}
+      </List>
+      <Box sx={{ flex: 1 }} />
+      <ListItemButton
+        component={NavLink}
+        to="/profil"
+        onClick={onNavigate}
+        sx={{ borderRadius: 3, p: 1 }}
+      >
+        <Avatar sx={{ width: 38, height: 38, bgcolor: 'secondary.light', color: 'secondary.dark', fontWeight: 800 }}>
+          {profile?.display_name?.charAt(0).toUpperCase() || <PersonRoundedIcon />}
+        </Avatar>
+        <ListItemText
+          sx={{ ml: 1.25 }}
+          primary={profile?.display_name}
+          secondary={profile?.email}
+          primaryTypographyProps={{ fontWeight: 750, noWrap: true, fontSize: '.9rem' }}
+          secondaryTypographyProps={{ noWrap: true, fontSize: '.72rem' }}
+        />
+      </ListItemButton>
+    </Box>
+  )
+}
+
+export function AppShell() {
+  const theme = useTheme()
+  const desktop = useMediaQuery(theme.breakpoints.up('lg'))
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [uploadOpen, setUploadOpen] = useState(false)
+
+  return (
+    <Box sx={{ minHeight: '100vh' }}>
+      {desktop ? (
+        <Drawer variant="permanent" sx={{ width: drawerWidth, '& .MuiDrawer-paper': { width: drawerWidth, borderRightColor: 'divider' } }}>
+          <Navigation />
+        </Drawer>
+      ) : (
+        <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} sx={{ '& .MuiDrawer-paper': { width: drawerWidth } }}>
+          <Navigation onNavigate={() => setDrawerOpen(false)} />
+        </Drawer>
+      )}
+      <AppBar
+        position="fixed"
+        color="inherit"
+        elevation={0}
+        sx={{ width: { lg: `calc(100% - ${drawerWidth}px)` }, ml: { lg: `${drawerWidth}px` }, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'rgba(255,255,255,.88)', backdropFilter: 'blur(16px)' }}
+      >
+        <Toolbar sx={{ gap: 1.5 }}>
+          {!desktop && <IconButton aria-label="Menü öffnen" onClick={() => setDrawerOpen(true)}><MenuRoundedIcon /></IconButton>}
+          {!desktop && <Brand compact />}
+          <Box sx={{ flex: 1 }} />
+          <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => setUploadOpen(true)}>
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Aktivität </Box>importieren
+          </Button>
+        </Toolbar>
+      </AppBar>
+      <Box component="main" sx={{ ml: { lg: `${drawerWidth}px` }, pt: '64px', minHeight: '100vh' }}>
+        <Box sx={{ width: '100%', maxWidth: 1480, mx: 'auto', px: { xs: 2, sm: 3, xl: 5 }, py: { xs: 3, md: 4 } }}>
+          <Outlet context={{ openImport: () => setUploadOpen(true) } satisfies ShellOutletContext} />
+        </Box>
+      </Box>
+      <UploadDialog open={uploadOpen} onClose={() => setUploadOpen(false)} />
+    </Box>
+  )
+}

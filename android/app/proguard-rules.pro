@@ -1,0 +1,3 @@
+-keepattributes Signature,*Annotation*
+-keep class com.squareup.moshi.** { *; }
+-dontwarn javax.annotation.**

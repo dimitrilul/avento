@@ -1,0 +1,179 @@
+import { useEffect, useState } from 'react'
+import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded'
+import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded'
+import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
+import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded'
+import EditRoundedIcon from '@mui/icons-material/EditRounded'
+import FavoriteRoundedIcon from '@mui/icons-material/FavoriteRounded'
+import LandscapeRoundedIcon from '@mui/icons-material/LandscapeRounded'
+import RouteRoundedIcon from '@mui/icons-material/RouteRounded'
+import SpeedRoundedIcon from '@mui/icons-material/SpeedRounded'
+import TimerRoundedIcon from '@mui/icons-material/TimerRounded'
+import WhatshotRoundedIcon from '@mui/icons-material/WhatshotRounded'
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  Stack,
+  TextField,
+  Typography,
+  useTheme,
+} from '@mui/material'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom'
+import { activitiesApi, type Activity, type ActivityUpdate } from '../api'
+import { ActivityCharts } from '../components/ActivityCharts'
+import { AiSummaryCard } from '../components/AiSummaryCard'
+import { MetricCard } from '../components/MetricCard'
+import { OverlayExportDialog } from '../components/OverlayExportDialog'
+import { ContentLoading, ErrorState } from '../components/States'
+import { TrackMap } from '../components/TrackMap'
+import { WeatherCard } from '../components/WeatherCard'
+import {
+  activityTypeLabels,
+  activityTypes,
+  errorMessage,
+  formatDateTime,
+  formatDistance,
+  formatDuration,
+  formatElevation,
+  formatHeartRate,
+  formatPower,
+  formatSpeedMps,
+} from '../utils/format'
+
+export function ActivityDetailPage() {
+  const { id = '' } = useParams()
+  const navigate = useNavigate()
+  const client = useQueryClient()
+  const theme = useTheme()
+  const [editOpen, setEditOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
+  const activity = useQuery({ queryKey: ['activity', id], queryFn: () => activitiesApi.get(id), enabled: Boolean(id) })
+  const track = useQuery({ queryKey: ['activity', id, 'track'], queryFn: () => activitiesApi.track(id), enabled: Boolean(id) })
+  const remove = useMutation({
+    mutationFn: () => activitiesApi.delete(id),
+    onSuccess: async () => {
+      await Promise.all([client.invalidateQueries({ queryKey: ['activities'] }), client.invalidateQueries({ queryKey: ['statistics'] })])
+      navigate('/aktivitaeten', { replace: true })
+    },
+  })
+
+  if (activity.isLoading) return <ContentLoading label="Aktivität wird geladen …" />
+  if (activity.isError || !activity.data) return <ErrorState error={activity.error ?? new Error('Aktivität nicht gefunden.')} onRetry={() => void activity.refetch()} />
+  const item = activity.data
+  const points = track.data?.points ?? []
+
+  return (
+    <>
+      <Button component={RouterLink} to="/aktivitaeten" color="inherit" startIcon={<ArrowBackRoundedIcon />} sx={{ mb: 2 }}>Alle Aktivitäten</Button>
+      <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ xs: 'stretch', md: 'flex-end' }} gap={2.5} sx={{ mb: 3 }}>
+        <Box sx={{ minWidth: 0 }}>
+          <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap" sx={{ mb: .75 }}>
+            <Chip color="primary" size="small" label={activityTypeLabels[item.type] ?? item.type} />
+            <Typography variant="body2" color="text.secondary">{formatDateTime(item.started_at)}</Typography>
+          </Stack>
+          <Typography variant="h2" component="h1">{item.title}</Typography>
+          {item.original_filename && <Typography variant="caption" color="text.secondary">Importiert aus {item.original_filename}</Typography>}
+        </Box>
+        <Stack direction="row" gap={1} flexWrap="wrap">
+          <Button variant="outlined" startIcon={<EditRoundedIcon />} onClick={() => setEditOpen(true)}>Bearbeiten</Button>
+          <Button variant="contained" startIcon={<DownloadRoundedIcon />} onClick={() => setExportOpen(true)}>PNG-Overlay</Button>
+        </Stack>
+      </Stack>
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(3, 1fr)', xl: 'repeat(6, 1fr)' }, gap: 1.5, mb: 3 }}>
+        <MetricCard label="Distanz" value={formatDistance(item.distance_m)} icon={<RouteRoundedIcon />} accent={theme.palette.chart.blue} />
+        <MetricCard label="Bewegungszeit" value={formatDuration(item.moving_time_s)} icon={<TimerRoundedIcon />} accent={theme.palette.chart.teal} />
+        <MetricCard label="Höhenmeter" value={formatElevation(item.elevation_gain_m)} icon={<LandscapeRoundedIcon />} accent={theme.palette.chart.lime} />
+        <MetricCard label="Ø Tempo" value={formatSpeedMps(item.avg_speed_mps)} icon={<SpeedRoundedIcon />} accent={theme.palette.chart.amber} />
+        <MetricCard label="Ø Herzfrequenz" value={formatHeartRate(item.avg_hr_bpm)} icon={<FavoriteRoundedIcon />} accent={theme.palette.chart.coral} />
+        <MetricCard label="Ø Leistung" value={formatPower(item.avg_power_w)} icon={<WhatshotRoundedIcon />} accent={theme.palette.chart.amber} />
+      </Box>
+
+      <Card sx={{ overflow: 'hidden', mb: 3 }}>
+        {track.isLoading ? <ContentLoading label="Strecke wird geladen …" /> : track.isError ? <Box sx={{ p: 3 }}><ErrorState error={track.error} onRetry={() => void track.refetch()} /></Box> : <TrackMap points={points} />}
+      </Card>
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2.5, mb: 3 }}>
+        <AiSummaryCard activityId={id} fallback={item.ai_summary} provider={item.ai_provider} />
+        <WeatherCard activityId={id} fallback={item.weather} />
+      </Box>
+
+      <ActivityCharts points={points} />
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2.5, mt: 3 }}>
+        <Card>
+          <CardContent sx={{ p: 2.5 }}>
+            <Typography variant="h3" sx={{ mb: 1 }}>Notizen</Typography>
+            <Typography color={item.notes ? 'text.primary' : 'text.secondary'} sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
+              {item.notes || 'Noch keine Notizen zu dieser Fahrt.'}
+            </Typography>
+            <Button startIcon={<EditRoundedIcon />} sx={{ mt: 1.5 }} onClick={() => setEditOpen(true)}>Notizen bearbeiten</Button>
+          </CardContent>
+        </Card>
+        <HeartRateZones activity={item} />
+      </Box>
+
+      <Box sx={{ mt: 5, pt: 3, borderTop: '1px solid', borderColor: 'divider' }}>
+        <Button color="error" startIcon={<DeleteOutlineRoundedIcon />} onClick={() => setDeleteOpen(true)}>Aktivität löschen</Button>
+      </Box>
+
+      <EditActivityDialog open={editOpen} onClose={() => setEditOpen(false)} activity={item} />
+      <OverlayExportDialog open={exportOpen} onClose={() => setExportOpen(false)} activity={item} points={points} />
+      <Dialog open={deleteOpen} onClose={() => !remove.isPending && setDeleteOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Aktivität löschen?</DialogTitle>
+        <DialogContent><Typography>„{item.title}“ und die zugehörige TCX-Datei werden dauerhaft gelöscht.</Typography>{remove.isError && <Alert severity="error" sx={{ mt: 2 }}>{errorMessage(remove.error)}</Alert>}</DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3 }}><Button color="inherit" onClick={() => setDeleteOpen(false)}>Abbrechen</Button><Button color="error" variant="contained" disabled={remove.isPending} onClick={() => remove.mutate()}>{remove.isPending ? 'Wird gelöscht …' : 'Endgültig löschen'}</Button></DialogActions>
+      </Dialog>
+    </>
+  )
+}
+
+function EditActivityDialog({ open, onClose, activity }: { open: boolean; onClose: () => void; activity: Activity }) {
+  const client = useQueryClient()
+  const [values, setValues] = useState<ActivityUpdate>({ title: activity.title, type: activity.type, notes: activity.notes })
+  useEffect(() => setValues({ title: activity.title, type: activity.type, notes: activity.notes }), [activity])
+  const mutation = useMutation({
+    mutationFn: () => activitiesApi.update(activity.id, values),
+    onSuccess: async (updated) => {
+      client.setQueryData(['activity', activity.id], updated)
+      await client.invalidateQueries({ queryKey: ['activities'] })
+      onClose()
+    },
+  })
+  return (
+    <Dialog open={open} onClose={mutation.isPending ? undefined : onClose} fullWidth maxWidth="sm">
+      <DialogTitle>Aktivität bearbeiten</DialogTitle>
+      <DialogContent><Stack spacing={2.25} sx={{ pt: 1 }}>
+        <TextField label="Titel" required fullWidth value={values.title ?? ''} onChange={(event) => setValues((current) => ({ ...current, title: event.target.value }))} />
+        <FormControl fullWidth><InputLabel id="edit-type-label">Aktivitätstyp</InputLabel><Select labelId="edit-type-label" label="Aktivitätstyp" value={values.type ?? 'ride'} onChange={(event) => setValues((current) => ({ ...current, type: event.target.value }))}>{activityTypes.map((type) => <MenuItem key={type.value} value={type.value}>{type.label}</MenuItem>)}</Select></FormControl>
+        <TextField label="Private Notizen" multiline minRows={5} fullWidth value={values.notes ?? ''} onChange={(event) => setValues((current) => ({ ...current, notes: event.target.value }))} />
+        {mutation.isError && <Alert severity="error">{errorMessage(mutation.error)}</Alert>}
+      </Stack></DialogContent>
+      <DialogActions sx={{ px: 3, pb: 3 }}><Button color="inherit" onClick={onClose}>Abbrechen</Button><Button variant="contained" disabled={mutation.isPending || !values.title?.trim()} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Wird gespeichert …' : 'Speichern'}</Button></DialogActions>
+    </Dialog>
+  )
+}
+
+function HeartRateZones({ activity }: { activity: Activity }) {
+  const zones = Object.entries(activity.hr_zone_seconds ?? {})
+  const total = zones.reduce((sum, [, seconds]) => sum + seconds, 0)
+  return (
+    <Card><CardContent sx={{ p: 2.5 }}><Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}><div><Typography variant="h3">Herzfrequenzzonen</Typography><Typography variant="body2" color="text.secondary">Zeit in den Trainingsbereichen</Typography></div><AccessTimeRoundedIcon color="action" /></Stack>
+      {zones.length ? <Stack spacing={1.25}>{zones.map(([zone, seconds], index) => <Box key={zone}><Stack direction="row" justifyContent="space-between"><Typography variant="body2" fontWeight={700}>{zone}</Typography><Typography variant="body2" color="text.secondary">{formatDuration(seconds)}</Typography></Stack><Box sx={{ mt: .6, height: 7, borderRadius: 4, bgcolor: 'action.hover', overflow: 'hidden' }}><Box sx={{ width: `${total ? seconds / total * 100 : 0}%`, height: '100%', bgcolor: ['#4D82BC', '#0E6562', '#A5C838', '#E9A23B', '#E26D5A'][index % 5] }} /></Box></Box>)}</Stack> : <Typography color="text.secondary">Keine Herzfrequenzzonen verfügbar.</Typography>}
+    </CardContent></Card>
+  )
+}

@@ -1,0 +1,20 @@
+@import '@fontsource-variable/manrope';
+@import 'maplibre-gl/dist/maplibre-gl.css';
+
+:root {
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { min-height: 100%; margin: 0; }
+body { min-width: 320px; }
+a { color: inherit; }
+button, input, textarea { font: inherit; }
+
+.maplibregl-map { font-family: 'Manrope Variable', system-ui, sans-serif; }
+.maplibregl-ctrl-group { border-radius: 12px !important; overflow: hidden; }
+
+@media print {
+  .no-print { display: none !important; }
+}
