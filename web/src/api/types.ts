@@ -15,6 +15,8 @@ export interface Profile {
   hr_max: number | null
   hr_rest: number | null
   hr_zones: HeartRateZone[]
+  training_goals: string[]
+  avatar_data_url?: string | null
 }
 
 export interface TokenResponse {
@@ -185,11 +187,96 @@ export interface StatisticsOverview {
   elevation_gain_m: number
   training_load: number
   avg_speed_mps: number | null
+  avg_hr_bpm: number | null
   by_month: TrendPoint[]
+  granularity: StatisticsGranularity
+  series: StatisticsSeriesPoint[]
+  comparison: StatisticsComparison | null
+}
+
+export type StatisticsGranularity = 'day' | 'week' | 'month' | 'auto'
+
+export interface StatisticsSeriesPoint {
+  period_start: string
+  activity_count: number
+  distance_m: number
+  duration_s: number
+  moving_time_s: number
+  elevation_gain_m: number
+  training_load: number
+  avg_speed_mps: number | null
+  avg_hr_bpm: number | null
+}
+
+export interface StatisticsComparison {
+  date_from: string
+  date_to: string
+  activity_count: number
+  distance_m: number
+  duration_s: number
+  moving_time_s: number
+  elevation_gain_m: number
+  training_load: number
+  avg_speed_mps: number | null
+  avg_hr_bpm: number | null
+  changes: Record<string, number | null>
+}
+
+export interface ActivityComparisonMetric {
+  activity_id: string
+  title: string
+  distance_m: number
+  duration_s: number
+  moving_time_s: number
+  elevation_gain_m: number
+  avg_speed_mps: number | null
+  avg_hr_bpm: number | null
+  max_hr_bpm: number | null
+  efficiency_kmh_per_bpm: number | null
+  headwind_kmh: number | null
+  relative_score: number | null
+}
+
+export interface ActivityComparisonProfilePoint {
+  progress_percent: number
+  distance_km: number
+  elevation_m: number | null
+  speed_kmh: number | null
+  heart_rate_bpm: number | null
+}
+
+export interface ActivityComparisonProfile {
+  activity_id: string
+  title: string
+  points: ActivityComparisonProfilePoint[]
 }
 
 export interface ActivityComparison {
   activities: Activity[]
+  metrics: ActivityComparisonMetric[]
+  profiles: ActivityComparisonProfile[]
+  ai_summary: string | null
+  ai_provider: string | null
+}
+
+export type ChatRole = 'user' | 'assistant'
+
+export interface ChatHistoryItem {
+  role: ChatRole
+  content: string
+}
+
+export interface ChatSource {
+  activity_id: string
+  title: string
+  started_at: string
+}
+
+export interface ChatResponse {
+  answer: string
+  provider: string
+  sources: ChatSource[]
+  tools_used: string[]
 }
 
 export interface ApiErrorBody {

@@ -8,6 +8,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -68,7 +69,8 @@ private fun ConnectedAventoApp(container: AppContainer, connection: ServerState.
     }
 
     val navController = rememberNavController()
-    val sessionPresent by repository.session.map { it != null }
+    val sessionFlow = remember(repository) { repository.session.map { it != null } }
+    val sessionPresent by sessionFlow
         .collectAsStateWithLifecycle(initialValue = initiallyAuthenticated == true)
     LaunchedEffect(sessionPresent) {
         if (!sessionPresent && navController.currentDestination?.route !in setOf(

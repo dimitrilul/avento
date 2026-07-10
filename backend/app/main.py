@@ -9,7 +9,7 @@ from sqlalchemy import text
 from . import models  # noqa: F401 - registers SQLAlchemy metadata
 from .config import get_settings
 from .database import Base, SessionLocal, engine
-from .routers import activities, auth, profile
+from .routers import activities, auth, chat, profile
 
 
 settings = get_settings()
@@ -44,6 +44,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(profile.router, prefix="/api/v1")
 app.include_router(activities.router, prefix="/api/v1")
+app.include_router(chat.router, prefix="/api/v1")
 
 
 @app.get("/")

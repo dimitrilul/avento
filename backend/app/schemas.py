@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 
 class Message(BaseModel):
@@ -62,6 +62,8 @@ class ProfileResponse(BaseModel):
     hr_max: int
     hr_rest: int
     hr_zones: list[HeartRateZone]
+    training_goals: list[str] = Field(default_factory=list)
+    avatar_data_url: str | None = None
 
 
 class ProfileUpdate(BaseModel):
@@ -69,6 +71,17 @@ class ProfileUpdate(BaseModel):
     hr_max: int | None = Field(default=None, ge=80, le=250)
     hr_rest: int | None = Field(default=None, ge=30, le=150)
     hr_zones: list[HeartRateZone] | None = Field(default=None, min_length=1, max_length=10)
+    training_goals: list[str] | None = Field(default=None, max_length=12)
+
+    @field_validator("training_goals")
+    @classmethod
+    def normalize_training_goals(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        normalized = list(dict.fromkeys(goal.strip() for goal in value if goal.strip()))
+        if any(len(goal) > 80 for goal in normalized):
+            raise ValueError("Ein Trainingsziel darf höchstens 80 Zeichen lang sein.")
+        return normalized
 
 
 class ProfilePasswordChange(BaseModel):
@@ -122,7 +135,7 @@ class ActivityResponse(BaseModel):
     duration_s: float
     moving_time_s: float
     pause_time_s: float
-    avg_speed_mps: float
+    avg_speed_mps: float | None
     max_speed_mps: float
     elevation_gain_m: float
     avg_hr_bpm: float | None
@@ -177,6 +190,32 @@ class SummaryResponse(BaseModel):
     updated_at: datetime
 
 
+class StatisticsSeriesPoint(BaseModel):
+    period_start: date
+    activity_count: int
+    distance_m: float
+    duration_s: float
+    moving_time_s: float
+    elevation_gain_m: float
+    training_load: float
+    avg_speed_mps: float | None
+    avg_hr_bpm: float | None
+
+
+class StatisticsComparison(BaseModel):
+    date_from: date
+    date_to: date
+    activity_count: int
+    distance_m: float
+    duration_s: float
+    moving_time_s: float
+    elevation_gain_m: float
+    training_load: float
+    avg_speed_mps: float | None
+    avg_hr_bpm: float | None
+    changes: dict[str, float | None]
+
+
 class StatisticsOverview(BaseModel):
     activity_count: int
     distance_m: float
@@ -185,6 +224,10 @@ class StatisticsOverview(BaseModel):
     elevation_gain_m: float
     training_load: float
     avg_speed_mps: float
+    avg_hr_bpm: float | None = None
+    granularity: str = "month"
+    series: list[StatisticsSeriesPoint] = Field(default_factory=list)
+    comparison: StatisticsComparison | None = None
     by_month: list[dict[str, Any]]
 
 
@@ -192,5 +235,68 @@ class CompareRequest(BaseModel):
     activity_ids: list[str] = Field(min_length=2, max_length=10)
 
 
+class ComparisonMetric(BaseModel):
+    activity_id: str
+    title: str
+    distance_m: float
+    duration_s: float
+    moving_time_s: float
+    elevation_gain_m: float
+    avg_speed_mps: float | None
+    avg_hr_bpm: float | None
+    max_hr_bpm: int | None
+    efficiency_kmh_per_bpm: float | None
+    headwind_kmh: float | None
+    relative_score: float | None
+
+
+class ComparisonProfilePoint(BaseModel):
+    progress_percent: float
+    distance_km: float
+    elevation_m: float | None
+    speed_kmh: float | None
+    heart_rate_bpm: int | None
+
+
+class ComparisonProfile(BaseModel):
+    activity_id: str
+    title: str
+    points: list[ComparisonProfilePoint]
+
+
 class CompareResponse(BaseModel):
     activities: list[ActivityResponse]
+    metrics: list[ComparisonMetric] = Field(default_factory=list)
+    profiles: list[ComparisonProfile] = Field(default_factory=list)
+    ai_summary: str | None = None
+    ai_provider: str | None = None
+
+
+class ChatHistoryMessage(BaseModel):
+    role: str = Field(pattern=r"^(user|assistant)$")
+    content: str = Field(min_length=1, max_length=4000)
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+    history: list[ChatHistoryMessage] = Field(default_factory=list, max_length=20)
+    activity_id: str | None = Field(default=None, max_length=36)
+
+    @model_validator(mode="after")
+    def limit_history_size(self) -> "ChatRequest":
+        if sum(len(message.content) for message in self.history) > 32_000:
+            raise ValueError("Der Chatverlauf ist für eine einzelne Anfrage zu lang.")
+        return self
+
+
+class ChatSource(BaseModel):
+    activity_id: str
+    title: str
+    started_at: datetime
+
+
+class ChatResponse(BaseModel):
+    answer: str
+    provider: str
+    sources: list[ChatSource] = Field(default_factory=list)
+    tools_used: list[str] = Field(default_factory=list)

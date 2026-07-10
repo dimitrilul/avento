@@ -6,8 +6,10 @@ import { AppShell } from './layout/AppShell'
 import { AuthLayout } from './layout/AuthLayout'
 
 const ActivitiesPage = lazy(() => import('./pages/ActivitiesPage').then((module) => ({ default: module.ActivitiesPage })))
+const ActivityAnalysisPage = lazy(() => import('./pages/ActivityAnalysisPage').then((module) => ({ default: module.ActivityAnalysisPage })))
 const ActivityDetailPage = lazy(() => import('./pages/ActivityDetailPage').then((module) => ({ default: module.ActivityDetailPage })))
 const BootstrapPage = lazy(() => import('./pages/BootstrapPage').then((module) => ({ default: module.BootstrapPage })))
+const ChatPage = lazy(() => import('./pages/ChatPage').then((module) => ({ default: module.ChatPage })))
 const ComparePage = lazy(() => import('./pages/ComparePage').then((module) => ({ default: module.ComparePage })))
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })))
 const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })))
@@ -29,9 +31,11 @@ export function App() {
         <Route element={<RequireAuth><AppShell /></RequireAuth>}>
           <Route index element={<DashboardPage />} />
           <Route path="/aktivitaeten" element={<ActivitiesPage />} />
+          <Route path="/aktivitaeten/:id/analyse" element={<ActivityAnalysisPage />} />
           <Route path="/aktivitaeten/:id" element={<ActivityDetailPage />} />
           <Route path="/statistiken" element={<StatisticsPage />} />
           <Route path="/vergleich" element={<ComparePage />} />
+          <Route path="/coach" element={<ChatPage />} />
           <Route path="/profil" element={<ProfilePage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

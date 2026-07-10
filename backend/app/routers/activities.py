@@ -1,17 +1,26 @@
 from __future__ import annotations
 
 import hashlib
-from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
-from ..ai import LocalSummaryProvider, get_summary_provider
+from ..ai import LocalSummaryProvider, comparison_summary, get_summary_provider
+from ..analysis import (
+    add_relative_scores,
+    coaching_context,
+    comparison_metric,
+    find_similar_activities,
+    normalized_profile,
+    route_wind_summary,
+)
 from ..config import get_settings
 from ..database import get_db
 from ..deps import get_current_user
@@ -27,11 +36,21 @@ from ..schemas import (
     TrackResponse,
     WeatherResponse,
 )
+from ..statistics import build_statistics
 from ..tcx import ParsedActivity, TcxError, parse_tcx
 from ..weather import get_weather_provider
 
 
 router = APIRouter(tags=["Aktivitäten"])
+
+
+def _local_midnight(value: date, timezone_name: str) -> datetime:
+    return datetime.combine(value, time.min, tzinfo=ZoneInfo(timezone_name)).astimezone(timezone.utc)
+
+
+def _local_date(value: datetime, timezone_name: str) -> date:
+    aware = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return aware.astimezone(ZoneInfo(timezone_name)).date()
 
 
 def _activity_for_user(db: Session, user: User, activity_id: str) -> Activity:
@@ -74,6 +93,24 @@ def _activity_response(activity: Activity) -> ActivityResponse:
     )
 
 
+def _invalidate_summary(activity: Activity) -> None:
+    activity.ai_summary = None
+    activity.ai_provider = None
+    activity.ai_updated_at = None
+
+
+def _invalidate_later_summaries(db: Session, activity: Activity) -> None:
+    db.execute(
+        update(Activity)
+        .where(
+            Activity.user_id == activity.user_id,
+            Activity.id != activity.id,
+            Activity.started_at > activity.started_at,
+        )
+        .values(ai_summary=None, ai_provider=None, ai_updated_at=None)
+    )
+
+
 def _first_coordinate(activity: Activity) -> tuple[float, float] | None:
     for point in activity.track_points or []:
         if point.get("latitude") is not None and point.get("longitude") is not None:
@@ -82,6 +119,7 @@ def _first_coordinate(activity: Activity) -> tuple[float, float] | None:
 
 
 def _refresh_weather(activity: Activity) -> None:
+    _invalidate_summary(activity)
     settings = get_settings()
     coordinate = _first_coordinate(activity)
     if coordinate is None:
@@ -91,7 +129,27 @@ def _refresh_weather(activity: Activity) -> None:
         return
     provider = get_weather_provider(settings)
     try:
-        activity.weather = provider.weather_at(*coordinate, activity.started_at)
+        route_samples = provider.weather_along_route(
+            activity.track_points or [],
+            maximum_samples=settings.weather_route_samples,
+        )
+        if route_samples:
+            metadata = {"point_index", "track_time", "latitude", "longitude"}
+            activity.weather = {key: value for key, value in route_samples[0].items() if key not in metadata}
+        else:
+            activity.weather = provider.weather_at(*coordinate, activity.started_at)
+        wind = route_wind_summary(activity.track_points or [], route_samples)
+        if activity.weather and route_samples:
+            components = {
+                int(component["point_index"]): component
+                for component in (wind or {}).get("samples", [])
+            }
+            activity.weather["route_weather_samples"] = [
+                {**sample, **components.get(int(sample["point_index"]), {})}
+                for sample in route_samples
+            ]
+        if activity.weather and wind:
+            activity.weather["route_wind"] = wind
         activity.weather_status = "available" if activity.weather else "unavailable"
     except Exception:
         activity.weather = None
@@ -118,9 +176,7 @@ def _apply_analysis(activity: Activity, parsed: ParsedActivity) -> None:
     activity.training_load = parsed.training_load
     activity.hr_zone_seconds = parsed.hr_zone_seconds
     activity.track_points = parsed.track_points
-    activity.ai_summary = None
-    activity.ai_provider = None
-    activity.ai_updated_at = None
+    _invalidate_summary(activity)
 
 
 @router.post("/activities", response_model=ActivityResponse, status_code=status.HTTP_201_CREATED)
@@ -168,8 +224,9 @@ async def upload_activity(
         ended_at=parsed.ended_at,
     )
     _apply_analysis(activity, parsed)
-    _refresh_weather(activity)
+    await run_in_threadpool(_refresh_weather, activity)
     db.add(activity)
+    _invalidate_later_summaries(db, activity)
     try:
         db.commit()
     except IntegrityError:
@@ -191,6 +248,11 @@ def list_activities(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ActivityListResponse:
+    timezone_name = get_settings().timezone
+    if date_from and date_from < date(1900, 1, 1):
+        raise HTTPException(status_code=422, detail="Zeiträume vor 1900 werden nicht unterstützt.")
+    if date_from and date_to and date_to < date_from:
+        raise HTTPException(status_code=422, detail="Das Enddatum muss am oder nach dem Startdatum liegen.")
     conditions: list[Any] = [Activity.user_id == current_user.id]
     if q:
         pattern = f"%{q.strip()}%"
@@ -198,9 +260,11 @@ def list_activities(
     if type:
         conditions.append(Activity.activity_type == type.strip().lower())
     if date_from:
-        conditions.append(Activity.started_at >= datetime.combine(date_from, time.min, tzinfo=timezone.utc))
+        conditions.append(Activity.started_at >= _local_midnight(date_from, timezone_name))
     if date_to:
-        conditions.append(Activity.started_at < datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=timezone.utc))
+        if date_to.year >= 9999:
+            raise HTTPException(status_code=422, detail="Das Enddatum liegt außerhalb des unterstützten Bereichs.")
+        conditions.append(Activity.started_at < _local_midnight(date_to + timedelta(days=1), timezone_name))
     total = db.scalar(select(func.count()).select_from(Activity).where(*conditions)) or 0
     activities = db.scalars(
         select(Activity).where(*conditions).order_by(Activity.started_at.desc()).offset(offset).limit(limit)
@@ -223,7 +287,22 @@ def compare_activities(
     by_id = {activity.id: activity for activity in found}
     if len(by_id) != len(requested):
         raise HTTPException(status_code=404, detail="Mindestens eine Aktivität wurde nicht gefunden.")
-    return CompareResponse(activities=[_activity_response(by_id[activity_id]) for activity_id in requested])
+    ordered = [by_id[activity_id] for activity_id in requested]
+    metrics = [comparison_metric(activity) for activity in ordered]
+    add_relative_scores(metrics)
+    profiles = [normalized_profile(activity) for activity in ordered]
+    ai_profiles = [
+        {**profile, "points": profile["points"][::4]}
+        for profile in profiles
+    ]
+    ai_summary, ai_provider = comparison_summary(get_settings(), ordered, metrics, ai_profiles)
+    return CompareResponse(
+        activities=[_activity_response(activity) for activity in ordered],
+        metrics=metrics,
+        profiles=profiles,
+        ai_summary=ai_summary,
+        ai_provider=ai_provider,
+    )
 
 
 @router.get("/activities/{activity_id}", response_model=ActivityResponse)
@@ -250,6 +329,8 @@ def update_activity(
         activity.activity_type = values["type"].strip().lower()
     if "notes" in values:
         activity.notes = values["notes"].strip() if values["notes"] and values["notes"].strip() else None
+    if values:
+        _invalidate_summary(activity)
     db.commit()
     db.refresh(activity)
     return _activity_response(activity)
@@ -271,6 +352,7 @@ def reanalyze_activity(
     except TcxError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     _apply_analysis(activity, parsed)
+    _refresh_weather(activity)
     db.commit()
     db.refresh(activity)
     return _activity_response(activity)
@@ -284,6 +366,7 @@ def delete_activity(
 ) -> Response:
     activity = _activity_for_user(db, current_user, activity_id)
     file_path = Path(activity.original_file_path)
+    _invalidate_later_summaries(db, activity)
     db.delete(activity)
     db.commit()
     file_path.unlink(missing_ok=True)
@@ -323,14 +406,27 @@ def refresh_weather(
     return WeatherResponse(status=activity.weather_status, data=activity.weather, updated_at=activity.weather_updated_at)
 
 
-def _generate_summary(activity: Activity) -> None:
+def _generate_summary(activity: Activity, db: Session, user: User) -> None:
     settings = get_settings()
     provider = get_summary_provider(settings)
+    candidates = db.scalars(
+        select(Activity)
+        .where(
+            Activity.user_id == user.id,
+            Activity.id != activity.id,
+            Activity.started_at < activity.started_at,
+        )
+        .order_by(Activity.started_at.desc())
+        .limit(30)
+    ).all()
+    similar = find_similar_activities(activity, candidates, limit=7)
+    context = coaching_context(activity, similar, user.training_goals or [])
+    context["profile"] = {"hr_max": user.hr_max, "hr_rest": user.hr_rest}
     try:
-        summary = provider.summarize(activity)
+        summary = provider.summarize(activity, context)
         provider_name = provider.name
     except Exception:
-        summary = LocalSummaryProvider().summarize(activity)
+        summary = LocalSummaryProvider().summarize(activity, context)
         provider_name = "local_fallback"
     activity.ai_summary = summary
     activity.ai_provider = provider_name
@@ -345,7 +441,7 @@ def get_summary(
 ) -> SummaryResponse:
     activity = _activity_for_user(db, current_user, activity_id)
     if not activity.ai_summary or not activity.ai_provider or not activity.ai_updated_at:
-        _generate_summary(activity)
+        _generate_summary(activity, db, current_user)
         db.commit()
         db.refresh(activity)
     return SummaryResponse(summary=activity.ai_summary, provider=activity.ai_provider, updated_at=activity.ai_updated_at)
@@ -360,7 +456,7 @@ def create_summary(
 ) -> SummaryResponse:
     activity = _activity_for_user(db, current_user, activity_id)
     if force or not activity.ai_summary:
-        _generate_summary(activity)
+        _generate_summary(activity, db, current_user)
         db.commit()
         db.refresh(activity)
     return SummaryResponse(summary=activity.ai_summary, provider=activity.ai_provider, updated_at=activity.ai_updated_at)
@@ -370,34 +466,58 @@ def create_summary(
 def statistics_overview(
     date_from: date | None = None,
     date_to: date | None = None,
+    granularity: str = Query(default="auto", pattern=r"^(auto|day|week|month)$"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> StatisticsOverview:
-    conditions: list[Any] = [Activity.user_id == current_user.id]
-    if date_from:
-        conditions.append(Activity.started_at >= datetime.combine(date_from, time.min, tzinfo=timezone.utc))
-    if date_to:
-        conditions.append(Activity.started_at < datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=timezone.utc))
-    activities = db.scalars(select(Activity).where(*conditions).order_by(Activity.started_at)).all()
-    monthly: dict[str, dict[str, Any]] = defaultdict(
-        lambda: {"activity_count": 0, "distance_m": 0.0, "duration_s": 0.0, "elevation_gain_m": 0.0, "training_load": 0.0}
-    )
-    for activity in activities:
-        key = activity.started_at.strftime("%Y-%m")
-        monthly[key]["activity_count"] += 1
-        monthly[key]["distance_m"] += activity.distance_m
-        monthly[key]["duration_s"] += activity.duration_s
-        monthly[key]["elevation_gain_m"] += activity.elevation_gain_m
-        monthly[key]["training_load"] += activity.training_load
-    distance = sum(activity.distance_m for activity in activities)
-    moving = sum(activity.moving_time_s for activity in activities)
-    return StatisticsOverview(
-        activity_count=len(activities),
-        distance_m=round(distance, 2),
-        duration_s=round(sum(activity.duration_s for activity in activities), 2),
-        moving_time_s=round(moving, 2),
-        elevation_gain_m=round(sum(activity.elevation_gain_m for activity in activities), 2),
-        training_load=round(sum(activity.training_load for activity in activities), 2),
-        avg_speed_mps=round(distance / moving, 3) if moving else 0.0,
-        by_month=[{"month": month, **{key: round(value, 2) if isinstance(value, float) else value for key, value in values.items()}} for month, values in sorted(monthly.items())],
+    settings = get_settings()
+    timezone_name = settings.timezone
+    end = date_to or datetime.now(ZoneInfo(timezone_name)).date()
+    if end.year >= 9999:
+        raise HTTPException(status_code=422, detail="Das Enddatum liegt außerhalb des unterstützten Bereichs.")
+    start = date_from
+    if start is None:
+        earliest = db.scalar(
+            select(func.min(Activity.started_at)).where(
+                Activity.user_id == current_user.id,
+                Activity.started_at < _local_midnight(end + timedelta(days=1), timezone_name),
+            )
+        )
+        start = _local_date(earliest, timezone_name) if earliest else end
+    if end < start:
+        raise HTTPException(status_code=422, detail="Das Enddatum muss am oder nach dem Startdatum liegen.")
+    if start < date(1900, 1, 1):
+        raise HTTPException(status_code=422, detail="Statistikzeiträume vor 1900 werden nicht unterstützt.")
+    current_conditions = [
+        Activity.user_id == current_user.id,
+        Activity.started_at >= _local_midnight(start, timezone_name),
+        Activity.started_at < _local_midnight(end + timedelta(days=1), timezone_name),
+    ]
+    span = (end - start).days + 1
+    if span > 36_525:
+        raise HTTPException(status_code=422, detail="Der Statistikzeitraum darf höchstens 100 Jahre umfassen.")
+    if granularity == "day" and span > 730:
+        raise HTTPException(status_code=422, detail="Tägliche Gruppierung ist auf zwei Jahre begrenzt.")
+    if granularity == "week" and span > 7_305:
+        raise HTTPException(status_code=422, detail="Wöchentliche Gruppierung ist auf zwanzig Jahre begrenzt.")
+    previous_to = start - timedelta(days=1)
+    previous_from = previous_to - timedelta(days=span - 1)
+    previous_conditions = [
+        Activity.user_id == current_user.id,
+        Activity.started_at >= _local_midnight(previous_from, timezone_name),
+        Activity.started_at < _local_midnight(previous_to + timedelta(days=1), timezone_name),
+    ]
+    activities = db.scalars(select(Activity).where(*current_conditions).order_by(Activity.started_at)).all()
+    previous = db.scalars(select(Activity).where(*previous_conditions).order_by(Activity.started_at)).all()
+    return StatisticsOverview.model_validate(
+        build_statistics(
+            activities,
+            previous,
+            start,
+            end,
+            previous_from,
+            previous_to,
+            granularity,
+            timezone_name,
+        )
     )

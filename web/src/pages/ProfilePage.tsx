@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react'
+import AddPhotoAlternateRoundedIcon from '@mui/icons-material/AddPhotoAlternateRounded'
+import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded'
 import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded'
 import PersonAddRoundedIcon from '@mui/icons-material/PersonAddRounded'
 import LockResetRoundedIcon from '@mui/icons-material/LockResetRounded'
 import PasswordRoundedIcon from '@mui/icons-material/PasswordRounded'
 import SaveRoundedIcon from '@mui/icons-material/SaveRounded'
-import { Alert, Box, Button, Card, CardContent, Stack, TextField, Typography } from '@mui/material'
+import { Alert, Autocomplete, Avatar, Box, Button, Card, CardContent, Divider, Stack, TextField, Typography } from '@mui/material'
 import { useMutation } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { authApi, profileApi, type HeartRateZone } from '../api'
 import { useAuth } from '../auth/AuthContext'
+import { AvatarCropDialog } from '../components/AvatarCropDialog'
 import { PageHeader } from '../components/PageHeader'
 import { errorMessage, formatDateTime } from '../utils/format'
 
@@ -20,20 +23,65 @@ export function ProfilePage() {
   const [hrMax, setHrMax] = useState<number | ''>(profile?.hr_max ?? '')
   const [hrRest, setHrRest] = useState<number | ''>(profile?.hr_rest ?? '')
   const [zones, setZones] = useState<HeartRateZone[]>(profile?.hr_zones ?? [])
-  useEffect(() => { if (profile) { setName(profile.display_name); setHrMax(profile.hr_max ?? ''); setHrRest(profile.hr_rest ?? ''); setZones(profile.hr_zones) } }, [profile])
+  const [trainingGoals, setTrainingGoals] = useState<string[]>(profile?.training_goals ?? [])
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [avatarError, setAvatarError] = useState<string | null>(null)
+  useEffect(() => { if (profile) { setName(profile.display_name); setHrMax(profile.hr_max ?? ''); setHrRest(profile.hr_rest ?? ''); setZones(profile.hr_zones); setTrainingGoals(profile.training_goals ?? []) } }, [profile])
   const save = useMutation({
-    mutationFn: () => profileApi.update({ display_name: name.trim(), hr_max: hrMax === '' ? null : Number(hrMax), hr_rest: hrRest === '' ? null : Number(hrRest), hr_zones: zones }),
+    mutationFn: () => profileApi.update({ display_name: name.trim(), hr_max: hrMax === '' ? null : Number(hrMax), hr_rest: hrRest === '' ? null : Number(hrRest), hr_zones: zones, training_goals: trainingGoals }),
     onSuccess: setProfile,
   })
+  const uploadAvatar = useMutation({
+    mutationFn: profileApi.uploadAvatar,
+    onSuccess: (updated) => { setProfile(updated); setAvatarFile(null); setAvatarError(null) },
+  })
+  const deleteAvatar = useMutation({ mutationFn: profileApi.deleteAvatar, onSuccess: setProfile })
+  function chooseAvatar(file?: File) {
+    setAvatarError(null)
+    if (!file) return
+    if (file.size > 10 * 1024 * 1024) {
+      setAvatarError('Das Profilbild darf maximal 10 MB groß sein.')
+      return
+    }
+    setAvatarFile(file)
+  }
   async function signOut() { await logout(); navigate('/login', { replace: true }) }
   return <>
     <PageHeader eyebrow="DEIN KONTO" title="Profil & Trainingszonen" description="Passe persönliche Werte an, damit deine Analysen besser zu dir passen." />
     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1fr) 360px' }, gap: 2.5 }}>
       <Card><CardContent sx={{ p: 3 }}><Stack spacing={2.5}>
+        <Typography variant="h3">Profilbild</Typography>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2.5} alignItems={{ xs: 'flex-start', sm: 'center' }}>
+          <Avatar src={profile?.avatar_data_url ?? undefined} alt={profile?.display_name ?? 'Profilbild'} sx={{ width: 112, height: 112, bgcolor: 'secondary.light', color: 'secondary.dark', fontSize: '2.2rem', fontWeight: 800, border: '4px solid', borderColor: 'background.paper', boxShadow: '0 8px 24px rgba(20,50,45,.12)' }}>
+            {profile?.display_name?.charAt(0).toUpperCase()}
+          </Avatar>
+          <Stack spacing={1} alignItems="flex-start">
+            <Typography variant="body2" color="text.secondary">Wähle ein Bild bis 10 MB und bestimme den quadratischen Ausschnitt selbst.</Typography>
+            <Stack direction="row" gap={1} flexWrap="wrap">
+              <Button component="label" variant="outlined" startIcon={<AddPhotoAlternateRoundedIcon />}>
+                Bild auswählen
+                <Box component="input" hidden type="file" accept="image/*,.heic,.heif" onChange={(event: React.ChangeEvent<HTMLInputElement>) => { chooseAvatar(event.target.files?.[0]); event.target.value = '' }} />
+              </Button>
+              {profile?.avatar_data_url && <Button color="error" startIcon={<DeleteOutlineRoundedIcon />} disabled={deleteAvatar.isPending} onClick={() => deleteAvatar.mutate()}>{deleteAvatar.isPending ? 'Wird entfernt …' : 'Bild entfernen'}</Button>}
+            </Stack>
+          </Stack>
+        </Stack>
+        {(avatarError || uploadAvatar.isError || deleteAvatar.isError) && <Alert severity="error">{avatarError ?? errorMessage(uploadAvatar.error ?? deleteAvatar.error)}</Alert>}
+        <Divider />
         <Typography variant="h3">Persönliche Daten</Typography>
         <TextField label="Anzeigename" value={name} onChange={(event) => setName(event.target.value)} fullWidth />
         <TextField label="E-Mail-Adresse" value={profile?.email ?? ''} disabled fullWidth helperText="Die E-Mail-Adresse kann derzeit nicht geändert werden." />
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}><TextField label="Maximale Herzfrequenz" type="number" value={hrMax} onChange={(event) => setHrMax(event.target.value ? Number(event.target.value) : '')} fullWidth /><TextField label="Ruheherzfrequenz" type="number" value={hrRest} onChange={(event) => setHrRest(event.target.value ? Number(event.target.value) : '')} fullWidth /></Stack>
+        <Typography variant="h3" sx={{ pt: 1 }}>Trainingsziele</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: -1.5 }}>Avento Insight nutzt diese Ziele für persönlichere Vergleiche, Motivation und Trainingshinweise.</Typography>
+        <Autocomplete
+          multiple
+          freeSolo
+          options={['Grundlagenausdauer', 'Geschwindigkeit', 'Langstrecke', 'Trainingshäufigkeit', 'Klettern', 'Regeneration']}
+          value={trainingGoals}
+          onChange={(_, values) => setTrainingGoals(values.map((value) => value.trim()).filter(Boolean))}
+          renderInput={(params) => <TextField {...params} label="Ziele auswählen oder eingeben" placeholder="Weiteres Ziel" helperText="Mit Enter kannst du ein eigenes Ziel hinzufügen." />}
+        />
         <Typography variant="h3" sx={{ pt: 1 }}>Herzfrequenzzonen</Typography>
         {zones.map((zone, index) => <Box key={`${zone.name}-${index}`} sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: '1.3fr 1fr 1fr 52px' }, gap: 1 }}><TextField label="Zone" value={zone.name} onChange={(event) => setZones((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} /><TextField label="Von bpm" type="number" value={zone.min_bpm} onChange={(event) => setZones((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, min_bpm: Number(event.target.value) } : item))} /><TextField label="Bis bpm" type="number" value={zone.max_bpm} onChange={(event) => setZones((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, max_bpm: Number(event.target.value) } : item))} /><Box component="input" aria-label={`Farbe ${zone.name}`} type="color" value={zone.color} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setZones((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, color: event.target.value } : item))} sx={{ width: 48, height: 40, p: .5, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'transparent' }} /></Box>)}
         {save.isError && <Alert severity="error">{errorMessage(save.error)}</Alert>}{save.isSuccess && <Alert severity="success">Profil gespeichert.</Alert>}
@@ -46,6 +94,7 @@ export function ProfilePage() {
         <Card><CardContent><Typography variant="h3">Datenschutz</Typography><Typography color="text.secondary" sx={{ mt: 1, lineHeight: 1.7 }}>Deine Fahrten werden zentral in deiner privaten Avento-Installation gespeichert. Andere Konten können deine Aktivitäten nicht sehen.</Typography></CardContent></Card>
       </Stack>
     </Box>
+    <AvatarCropDialog open={Boolean(avatarFile)} file={avatarFile} busy={uploadAvatar.isPending} onClose={() => setAvatarFile(null)} onConfirm={(file) => uploadAvatar.mutate(file)} />
   </>
 }
 

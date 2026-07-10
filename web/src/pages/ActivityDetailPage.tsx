@@ -6,7 +6,9 @@ import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded'
 import EditRoundedIcon from '@mui/icons-material/EditRounded'
 import FavoriteRoundedIcon from '@mui/icons-material/FavoriteRounded'
+import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded'
 import LandscapeRoundedIcon from '@mui/icons-material/LandscapeRounded'
+import MoreVertRoundedIcon from '@mui/icons-material/MoreVertRounded'
 import RouteRoundedIcon from '@mui/icons-material/RouteRounded'
 import SpeedRoundedIcon from '@mui/icons-material/SpeedRounded'
 import TimerRoundedIcon from '@mui/icons-material/TimerRounded'
@@ -22,12 +24,15 @@ import {
   DialogContent,
   DialogTitle,
   FormControl,
+  IconButton,
   InputLabel,
+  Menu,
   MenuItem,
   Select,
   Stack,
   TextField,
   Typography,
+  Tooltip,
   useTheme,
 } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -60,6 +65,7 @@ export function ActivityDetailPage() {
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
   const activity = useQuery({ queryKey: ['activity', id], queryFn: () => activitiesApi.get(id), enabled: Boolean(id) })
   const track = useQuery({ queryKey: ['activity', id, 'track'], queryFn: () => activitiesApi.track(id), enabled: Boolean(id) })
   const remove = useMutation({
@@ -105,8 +111,40 @@ export function ActivityDetailPage() {
           </Button>
           <Button variant="outlined" startIcon={<EditRoundedIcon />} onClick={() => setEditOpen(true)}>Bearbeiten</Button>
           <Button variant="contained" startIcon={<DownloadRoundedIcon />} onClick={() => setExportOpen(true)}>PNG-Overlay</Button>
+          <Tooltip title="Weitere Aktionen">
+            <IconButton
+              aria-label="Weitere Aktionen"
+              aria-controls={menuAnchor ? 'activity-actions-menu' : undefined}
+              aria-haspopup="true"
+              aria-expanded={menuAnchor ? 'true' : undefined}
+              onClick={(event) => setMenuAnchor(event.currentTarget)}
+              sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 3 }}
+            >
+              <MoreVertRoundedIcon />
+            </IconButton>
+          </Tooltip>
         </Stack>
       </Stack>
+
+      <Menu
+        id="activity-actions-menu"
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={() => setMenuAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <MenuItem
+          sx={{ color: 'error.main' }}
+          onClick={() => {
+            setMenuAnchor(null)
+            setDeleteOpen(true)
+          }}
+        >
+          <DeleteOutlineRoundedIcon fontSize="small" sx={{ mr: 1.25 }} />
+          Aktivität löschen
+        </MenuItem>
+      </Menu>
 
       {reanalyze.isError && <Alert severity="error" sx={{ mb: 2 }}>{errorMessage(reanalyze.error)}</Alert>}
 
@@ -142,8 +180,19 @@ export function ActivityDetailPage() {
         <HeartRateZones activity={item} />
       </Box>
 
-      <Box sx={{ mt: 5, pt: 3, borderTop: '1px solid', borderColor: 'divider' }}>
-        <Button color="error" startIcon={<DeleteOutlineRoundedIcon />} onClick={() => setDeleteOpen(true)}>Aktivität löschen</Button>
+      <Box sx={{ mt: 4 }}>
+        <Button
+          component={RouterLink}
+          to={`/aktivitaeten/${id}/analyse`}
+          variant="contained"
+          size="large"
+          fullWidth
+          startIcon={<InsightsRoundedIcon />}
+          sx={{ minHeight: 64, fontSize: '1.05rem' }}
+        >Detaillierte Analyse</Button>
+        <Typography variant="body2" color="text.secondary" textAlign="center" sx={{ mt: 1 }}>
+          Karte, Diagramme und Streckenabschnitte gemeinsam untersuchen
+        </Typography>
       </Box>
 
       <EditActivityDialog open={editOpen} onClose={() => setEditOpen(false)} activity={item} />

@@ -6,6 +6,7 @@ import de.avento.app.data.model.Activity
 import de.avento.app.data.model.ActivityList
 import de.avento.app.data.model.ActivityTrack
 import de.avento.app.data.model.OverviewStatistics
+import de.avento.app.data.model.Profile
 import de.avento.app.data.model.SummaryResponse
 import de.avento.app.data.model.WeatherResponse
 import de.avento.app.data.security.AuthTokens
@@ -88,6 +89,7 @@ private class RecordingRepository : AventoRepository {
     }
     override suspend fun changePassword(currentPassword: String, newPassword: String) = Unit
     override suspend fun logout() = Unit
+    override suspend fun profile() = Profile("1", "radler@example.de", "Radler")
     override suspend fun activities(query: String?) = ActivityList()
     override suspend fun statistics() = OverviewStatistics()
     override suspend fun uploadTcx(bytes: ByteArray, fileName: String, title: String?, type: String?, notes: String?) = Activity("1")

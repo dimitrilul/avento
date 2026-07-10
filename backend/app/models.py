@@ -29,6 +29,9 @@ class User(Base):
     hr_max: Mapped[int] = mapped_column(Integer, default=190)
     hr_rest: Mapped[int] = mapped_column(Integer, default=60)
     hr_zones: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    training_goals: Mapped[list[str]] = mapped_column(JSON, default=list)
+    avatar_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    avatar_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

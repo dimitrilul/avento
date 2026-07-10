@@ -3,8 +3,8 @@
 Avento ist eine private Full-Stack-Plattform für Radfahranalyse und
 Streckenvisualisierung. Eine native Android-App und eine responsive Web-App
 greifen auf dasselbe FastAPI-Backend zu. Importierte TCX-Dateien werden
-serverseitig gespeichert, analysiert, mit historischen Wetterdaten angereichert
-und optional durch eine KI-Zusammenfassung ergänzt.
+serverseitig gespeichert, analysiert, entlang der Strecke mit historischen Wetterdaten angereichert
+und optional durch einen persönlichen KI-Coach ausgewertet.
 
 ## Komponenten
 

@@ -6,6 +6,8 @@ import type {
   ActivityFilters,
   ActivityUpdate,
   BootstrapData,
+  ChatHistoryItem,
+  ChatResponse,
   ImportActivityData,
   InvitationResponse,
   PasswordResetResponse,
@@ -17,6 +19,7 @@ import type {
   TrackResponse,
   WeatherResponse,
   SummaryResponse,
+  StatisticsGranularity,
 } from './types'
 
 function queryString(values: Record<string, string | number | undefined>) {
@@ -96,6 +99,12 @@ export const profileApi = {
       method: 'POST',
       body: { current_password: currentPassword, new_password: newPassword },
     }),
+  uploadAvatar: (file: File) => {
+    const form = new FormData()
+    form.set('file', file)
+    return apiRequest<Profile>('/profile/avatar', { method: 'POST', body: form })
+  },
+  deleteAvatar: () => apiRequest<Profile>('/profile/avatar', { method: 'DELETE' }),
 }
 
 export const activitiesApi = {
@@ -139,10 +148,18 @@ export const activitiesApi = {
 }
 
 export const statisticsApi = {
-  overview: (dateFrom?: string, dateTo?: string) =>
+  overview: (dateFrom?: string, dateTo?: string, granularity: StatisticsGranularity = 'auto') =>
     apiRequest<StatisticsOverview>(
-      `/statistics/overview${queryString({ date_from: dateFrom, date_to: dateTo })}`,
+      `/statistics/overview${queryString({ date_from: dateFrom, date_to: dateTo, granularity })}`,
     ),
+}
+
+export const chatApi = {
+  send: (message: string, history: ChatHistoryItem[], activityId?: string) =>
+    apiRequest<ChatResponse>('/chat', {
+      method: 'POST',
+      body: { message, history, activity_id: activityId || undefined },
+    }),
 }
 
 export type * from './types'

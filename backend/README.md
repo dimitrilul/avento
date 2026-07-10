@@ -28,9 +28,20 @@ ausstellen. Der Token wird nur in dieser Antwort angezeigt und in der Datenbank 
 gespeichert. Ein erfolgreicher Reset über `POST /api/v1/auth/password-reset` sowie ein authentifizierter
 Passwortwechsel über `POST /api/v1/profile/password` widerrufen alle Refresh-Sitzungen des Benutzers.
 
-Ohne OpenAI-Schlüssel erstellt der Server eine deterministische lokale Zusammenfassung. Mit
-`AVENTO_OPENAI_API_KEY` verwendet er die Responses API und standardmäßig `gpt-5.4-mini`. Wetter wird anhand
-der ersten Streckenkoordinate und Startzeit über Open-Meteo ergänzt; ein nicht erreichbarer Anbieter verhindert
-den TCX-Import nicht.
+Ohne OpenAI-Schlüssel erstellt der Server deterministische lokale Coaching-Zusammenfassungen und beantwortet
+häufige Fragen im Avento Coach regelbasiert. Mit `AVENTO_OPENAI_API_KEY` verwendet er die Responses API und
+standardmäßig `gpt-5.4-mini`. Der Coach ruft Trainingsdaten über serverseitig abgesicherte Tools ab; dabei kann
+er Aktivitäten suchen, ähnliche Fahrten finden, Zeiträume vergleichen und Streckenabschnitte analysieren.
+
+Wetter wird über Open-Meteo an mehreren Punkten entlang der Strecke und zur jeweiligen Fahrzeit ermittelt.
+Avento berechnet daraus Gegen-, Rücken- und Seitenwind relativ zur tatsächlichen Fahrtrichtung. Die Anzahl der
+Stichproben lässt sich mit `AVENTO_WEATHER_ROUTE_SAMPLES` zwischen 3 und 12 konfigurieren. Ein nicht erreichbarer
+Anbieter verhindert den TCX-Import nicht.
+
+Kalenderzeiträume werden in `AVENTO_TIMEZONE` ausgewertet (Standard: `Europe/Berlin`), sodass Fahrten rund um
+Mitternacht im richtigen lokalen Tag, in der richtigen Woche und im richtigen Monat landen.
+
+Profilbilder dürfen höchstens 10 MB groß sein. Jedes von Pillow unterstützte Bildformat wird validiert,
+automatisch ausgerichtet, quadratisch zugeschnitten und als 512 × 512 Pixel großes WebP gespeichert.
 
 Die interaktive API-Dokumentation ist unter `/docs` verfügbar.

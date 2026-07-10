@@ -26,12 +26,17 @@ class Settings(BaseSettings):
     access_token_minutes: int = 15
     refresh_token_days: int = 30
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
+    timezone: str = "Europe/Berlin"
     upload_dir: Path = Path("./data/uploads")
     max_upload_bytes: int = 20 * 1024 * 1024
+    max_avatar_bytes: int = 10 * 1024 * 1024
+    avatar_size_px: int = 512
+    max_avatar_pixels: int = 20_000_000
     auto_create_schema: bool = True
 
     weather_provider: str = "open_meteo"
     weather_timeout_seconds: float = 8.0
+    weather_route_samples: int = Field(default=7, ge=3, le=12)
 
     openai_api_key: str | None = Field(
         default=None,

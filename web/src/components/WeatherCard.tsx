@@ -22,6 +22,10 @@ export function WeatherCard({ activityId, fallback }: { activityId: string; fall
   const weather = query.data?.data ?? fallback
   const humidity = weather?.relative_humidity_percent ?? weather?.humidity_percent
   const feelsLike = weather?.apparent_temperature_c ?? weather?.feels_like_c
+  const routeWind = weather?.route_wind && typeof weather.route_wind === 'object'
+    ? weather.route_wind as Record<string, unknown>
+    : undefined
+  const netHeadwind = typeof routeWind?.net_headwind_kmh === 'number' ? routeWind.net_headwind_kmh : null
 
   return (
     <Card sx={{ height: '100%', background: 'linear-gradient(150deg, #F8FBFF, #FFFFFF)' }}>
@@ -31,7 +35,7 @@ export function WeatherCard({ activityId, fallback }: { activityId: string; fall
             <WbSunnyRoundedIcon sx={{ color: 'chart.amber', fontSize: 32 }} />
             <div><Typography variant="h3">Wetter</Typography><Typography variant="body2" color="text.secondary">Bedingungen auf der Strecke</Typography></div>
           </Stack>
-          {query.data?.status && <Chip size="small" label={query.data.status === 'ready' ? 'Ermittelt' : query.data.status} />}
+          {query.data?.status && <Chip size="small" label={query.data.status === 'available' || query.data.status === 'ready' ? 'Ermittelt' : query.data.status} />}
         </Stack>
         <Divider sx={{ my: 2 }} />
         {query.isLoading && !fallback ? <Skeleton variant="rounded" height={120} /> : weather ? (
@@ -42,7 +46,8 @@ export function WeatherCard({ activityId, fallback }: { activityId: string; fall
             </Stack>
             <Stack direction="row" flexWrap="wrap" gap={1.5}>
               <WeatherMetric icon={<ThermostatRoundedIcon />} label="Gefühlt" value={feelsLike == null ? '–' : `${Math.round(feelsLike)} °C`} />
-              <WeatherMetric icon={<AirRoundedIcon />} label="Wind" value={weather.wind_speed_kmh == null ? '–' : `${Math.round(weather.wind_speed_kmh)} km/h`} />
+              <WeatherMetric icon={<AirRoundedIcon />} label="Wind" value={weather.wind_speed_kmh == null ? '–' : `${Math.round(weather.wind_speed_kmh)} km/h${weather.wind_direction_deg == null ? '' : ` aus ${windDirection(weather.wind_direction_deg)}`}`} />
+              <WeatherMetric icon={<AirRoundedIcon />} label="Auf der Strecke" value={windImpact(netHeadwind)} />
               <WeatherMetric icon={<WaterDropRoundedIcon />} label="Feuchte" value={humidity == null ? '–' : `${Math.round(humidity)} %`} />
             </Stack>
             {query.data?.updated_at && <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 2 }}>Aktualisiert {formatDateTime(query.data.updated_at)}</Typography>}
@@ -58,6 +63,19 @@ export function WeatherCard({ activityId, fallback }: { activityId: string; fall
       </CardContent>
     </Card>
   )
+}
+
+function windDirection(degrees: number) {
+  const labels = ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW']
+  const normalized = ((degrees % 360) + 360) % 360
+  return `${labels[Math.round(normalized / 45) % labels.length]} (${Math.round(normalized)}°)`
+}
+
+function windImpact(value: number | null) {
+  if (value == null) return 'Noch nicht berechnet'
+  if (value >= 1) return `${value.toLocaleString('de-DE', { maximumFractionDigits: 1 })} km/h Gegenwind`
+  if (value <= -1) return `${Math.abs(value).toLocaleString('de-DE', { maximumFractionDigits: 1 })} km/h Rückenwind`
+  return 'Ausgeglichen'
 }
 
 function WeatherMetric({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {

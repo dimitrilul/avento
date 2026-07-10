@@ -29,6 +29,7 @@ services:
       AVENTO_BOOTSTRAP_INVITE_CODE: ${BOOTSTRAP_INVITE_CODE:?BOOTSTRAP_INVITE_CODE in .env setzen}
       AVENTO_UPLOAD_DIR: /var/lib/avento/uploads
       AVENTO_CORS_ORIGINS: ${PUBLIC_URL:-http://localhost}
+      AVENTO_TIMEZONE: ${TIMEZONE:-Europe/Berlin}
       AVENTO_AUTO_CREATE_SCHEMA: "false"
       AVENTO_WEATHER_PROVIDER: ${WEATHER_PROVIDER:-open_meteo}
       AVENTO_OPENAI_API_KEY: ${OPENAI_API_KEY:-}

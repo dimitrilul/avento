@@ -6,6 +6,7 @@ import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded'
 import DirectionsBikeRoundedIcon from '@mui/icons-material/DirectionsBikeRounded'
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded'
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded'
+import SmartToyRoundedIcon from '@mui/icons-material/SmartToyRounded'
 import {
   AppBar,
   Avatar,
@@ -33,6 +34,7 @@ const nav = [
   { label: 'Aktivitäten', path: '/aktivitaeten', icon: <DirectionsBikeRoundedIcon /> },
   { label: 'Statistiken', path: '/statistiken', icon: <BarChartRoundedIcon /> },
   { label: 'Vergleich', path: '/vergleich', icon: <CompareArrowsRoundedIcon /> },
+  { label: 'Avento Chat', path: '/coach', icon: <SmartToyRoundedIcon /> },
 ]
 
 export interface ShellOutletContext {
@@ -80,7 +82,7 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
           p: 1,
         }}
       >
-        <Avatar sx={{ width: 38, height: 38, bgcolor: 'secondary.light', color: 'secondary.dark', fontWeight: 800 }}>
+        <Avatar src={profile?.avatar_data_url ?? undefined} alt={profile?.display_name ?? 'Profilbild'} sx={{ width: 38, height: 38, bgcolor: 'secondary.light', color: 'secondary.dark', fontWeight: 800 }}>
           {profile?.display_name?.charAt(0).toUpperCase() || <PersonRoundedIcon />}
         </Avatar>
         <ListItemText

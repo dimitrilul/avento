@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import de.avento.app.data.AventoRepository
 import de.avento.app.data.model.Activity
 import de.avento.app.data.model.OverviewStatistics
+import de.avento.app.data.model.Profile
 import de.avento.app.util.displayName
 import de.avento.app.util.readTcx
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +24,7 @@ data class DashboardUiState(
     val importing: Boolean = false,
     val activities: List<Activity> = emptyList(),
     val statistics: OverviewStatistics? = null,
+    val profile: Profile? = null,
     val error: String? = null,
     val message: String? = null,
 )
@@ -42,13 +44,15 @@ class DashboardViewModel(
             runCatching {
                 val activities = async { repository.activities(query) }
                 val statistics = async { repository.statistics() }
-                activities.await() to statistics.await()
-            }.onSuccess { (activities, statistics) ->
+                val profile = async { runCatching { repository.profile() }.getOrNull() }
+                Triple(activities.await(), statistics.await(), profile.await())
+            }.onSuccess { (activities, statistics, profile) ->
                 _state.update {
                     it.copy(
                         loading = false,
                         activities = activities.items,
                         statistics = statistics,
+                        profile = profile ?: it.profile,
                     )
                 }
             }.onFailure { failure ->
