@@ -44,6 +44,15 @@ function monthLabel(value: string) {
   return new Intl.DateTimeFormat('de-DE', { month: 'short', year: '2-digit' }).format(new Date(`${value}T12:00:00`))
 }
 
+function fitnessStatusLabel(status: string) {
+  return ({
+    insufficient_data: 'Noch zu wenig Daten',
+    positive: 'Positiver Trend',
+    negative: 'Unter Vergleichsniveau',
+    stable: 'Stabiler Trend',
+  } as Record<string, string>)[status] ?? status
+}
+
 export function DevelopmentPage() {
   const theme = useTheme()
   const [years, setYears] = useState(3)
@@ -65,6 +74,8 @@ export function DevelopmentPage() {
     speedKmh: point.avg_speed_mps == null ? null : point.avg_speed_mps * 3.6,
   }))
   const current = insights.data?.current
+  const hasActivities = (numberValue(current, 'activity_count') ?? 0) > 0
+  const hydrationWasRecorded = (numberValue(current, 'hydration_activity_count') ?? 0) > 0
   const tooltipStyle = { borderRadius: 14, border: `1px solid ${theme.palette.divider}`, boxShadow: '0 12px 30px rgba(20,50,45,.08)' }
 
   return (
@@ -97,7 +108,7 @@ export function DevelopmentPage() {
             <MetricCard label="Distanz" value={formatDistance(numberValue(current, 'distance_m'))} icon={<RouteRoundedIcon />} accent={theme.palette.chart.blue} delta={insights.data.changes.distance_m} hint="gegen Vorperiode" />
             <MetricCard label="Bewegungszeit" value={formatDuration(numberValue(current, 'moving_time_s'))} icon={<CalendarMonthRoundedIcon />} accent={theme.palette.chart.teal} delta={insights.data.changes.moving_time_s} hint="gegen Vorperiode" />
             <MetricCard label="Ø Geschwindigkeit" value={formatSpeedMps(numberValue(current, 'avg_speed_mps'))} icon={<SpeedRoundedIcon />} accent={theme.palette.chart.amber} delta={insights.data.changes.avg_speed_mps} hint="gegen Vorperiode" />
-            <MetricCard label="Dokumentierte Trinkmenge" value={formatHydration(numberValue(current, 'hydration_ml'))} icon={<WaterDropRoundedIcon />} accent={theme.palette.chart.blue} delta={insights.data.changes.hydration_ml} hint="erfasste Aktivitäten" />
+            <MetricCard label="Dokumentierte Trinkmenge" value={formatHydration(hydrationWasRecorded ? numberValue(current, 'hydration_ml') : null)} icon={<WaterDropRoundedIcon />} accent={theme.palette.chart.blue} delta={insights.data.changes.hydration_ml} hint="erfasste Aktivitäten" />
           </Box>
 
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: 'minmax(0, 1.55fr) minmax(320px, .75fr)' }, gap: 2.5, mb: 3 }}>
@@ -105,7 +116,7 @@ export function DevelopmentPage() {
               <CardContent sx={{ p: { xs: 2, sm: 2.5 } }}>
                 <Typography variant="h3">Fitnessverlauf</Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Trainingsumfang, Tempo und Belastung pro Monat</Typography>
-                {monthly.length ? (
+                {hasActivities && monthly.length ? (
                   <ResponsiveContainer width="100%" height={330}>
                     <ComposedChart data={monthly} margin={{ top: 10, right: 5, left: -12, bottom: 0 }}>
                       <CartesianGrid vertical={false} strokeDasharray="4 4" stroke={theme.palette.divider} />
@@ -125,7 +136,7 @@ export function DevelopmentPage() {
             <Card sx={{ background: `linear-gradient(145deg, ${alpha(theme.palette.primary.main, .13)}, rgba(255,255,255,.98) 70%)` }}>
               <CardContent sx={{ p: 2.5 }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="flex-start" gap={1}>
-                  <Box><Typography variant="overline" color="primary.main" fontWeight={800}>FITNESSTREND</Typography><Typography variant="h3" sx={{ mt: .25 }}>{insights.data.fitness_trend.status}</Typography></Box>
+                  <Box><Typography variant="overline" color="primary.main" fontWeight={800}>FITNESSTREND</Typography><Typography variant="h3" sx={{ mt: .25 }}>{fitnessStatusLabel(insights.data.fitness_trend.status)}</Typography></Box>
                   <AutoGraphRoundedIcon color="primary" sx={{ fontSize: 34 }} />
                 </Stack>
                 <Typography sx={{ mt: 2, lineHeight: 1.7 }}>{insights.data.fitness_trend.statement}</Typography>

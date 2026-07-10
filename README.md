@@ -8,7 +8,7 @@ und optional durch einen persönlichen KI-Coach ausgewertet.
 
 ## Komponenten
 
-- `backend/`: FastAPI, SQLAlchemy, PostgreSQL, TCX-Analyse, Open-Meteo und OpenAI
+- `backend/`: FastAPI, SQLAlchemy, PostgreSQL, TCX-Analyse, Open-Meteo, OpenAI und Read-only-MCP
 - `web/`: React, TypeScript, Material UI, MapLibre und Recharts
 - `android/`: Kotlin, Jetpack Compose und Material 3
 - `infra/`: Caddy als TLS-fähiger Reverse Proxy
@@ -30,6 +30,42 @@ Anschließend ist Avento unter `PUBLIC_URL` erreichbar. Der in
 `BOOTSTRAP_INVITE_CODE` konfigurierte Code ermöglicht die Erstellung des ersten
 Administratorkontos. Ohne `OPENAI_API_KEY` wird eine lokale, regelbasierte
 Zusammenfassung erzeugt; die restliche App bleibt vollständig nutzbar.
+
+## Analyse, Fotos und Rekorde
+
+Avento berechnet persönliche 10-, 20-, 30-, 40- und 50-km-Rekorde direkt aus
+den Trackpunkten. Hinzu kommen Langzeittrends, Monats- und Jahresvergleiche,
+vorsichtig formulierte Muster zu Wetter, Herzfrequenz, Tempo und
+Aktivitätsabständen sowie Saison- und Jahresrückblicke. Trinkmengen können pro
+Aktivität dokumentiert werden. Aktivitätsfotos werden validiert, als WebP
+gespeichert und optional über Aufnahmezeit und Koordinaten der Strecke
+zugeordnet.
+
+Jede Coach-Antwort und KI-Zusammenfassung liefert eine strukturierte
+Datengrundlage mit Zeitraum, Aktivitäten, Kennzahlen, Methoden und bekannten
+Einschränkungen.
+
+## Read-only-MCP
+
+Administratoren verwalten MCP-Clients in der Web-App unter
+`/administration/mcp`. Ein Client erhält granulare Leserechte, ein nur einmal
+angezeigtes Secret und daraus erzeugte, höchstens 15 Minuten gültige
+Zugriffstokens. Secrets und Tokens werden ausschließlich gehasht gespeichert;
+jede MCP-Anfrage landet ohne Roh-Tokens oder Secrets im Audit-Log.
+
+Der Streamable-HTTP-Endpunkt lautet `/api/v1/mcp/rpc`. Codex kann ihn
+beispielsweise mit einem Token aus einer Umgebungsvariable verwenden:
+
+```toml
+[mcp_servers.avento]
+url = "http://localhost/api/v1/mcp/rpc"
+bearer_token_env_var = "AVENTO_MCP_TOKEN"
+```
+
+Für einen ausschließlich lokal erreichbaren MCP-Prozess kann im
+Backend-Verzeichnis zusätzlich `python mcp_server.py` gestartet werden. Er
+bindet standardmäßig an `127.0.0.1:8765`. Andere Streamable-HTTP-fähige
+MCP-Clients verwenden denselben Endpunkt und Bearer-Token.
 
 ## Entwicklung
 
@@ -76,6 +112,6 @@ make backup
 ```
 
 Uploads und PostgreSQL-Daten liegen in Docker-Volumes. `scripts/backup.sh`
-sichert Datenbank und originale TCX-Dateien im lokalen Verzeichnis `backups/`.
+sichert Datenbank, originale TCX-Dateien und Aktivitätsfotos im lokalen Verzeichnis `backups/`.
 API-Schlüssel, Passwörter und Token gehören ausschließlich in `.env` und niemals
 ins Repository.

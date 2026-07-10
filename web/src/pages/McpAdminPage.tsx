@@ -50,6 +50,7 @@ interface OneTimeSecret {
   clientId?: string
   expiresIn?: number
   scopes?: string[]
+  canRequestToken?: boolean
 }
 
 export function McpAdminPage() {
@@ -94,7 +95,7 @@ export function McpAdminPage() {
       const { client_secret: clientSecret, ...createdClient } = result
       await refreshClients()
       setCreateOpen(false)
-      setOneTimeSecret({ title: 'MCP-Client angelegt', label: 'Client-Secret', value: clientSecret, clientId: createdClient.client_id, scopes: createdClient.scopes })
+      setOneTimeSecret({ title: 'MCP-Client angelegt', label: 'Client-Secret', value: clientSecret, clientId: createdClient.client_id, scopes: createdClient.scopes, canRequestToken: true })
       create.reset()
     } catch {
       // Die Fehlermeldung bleibt im Dialog sichtbar.
@@ -127,7 +128,7 @@ export function McpAdminPage() {
   async function rotateSecret(target: McpClient) {
     try {
       const result = await rotate.mutateAsync(target.client_id)
-      setOneTimeSecret({ title: 'Client-Secret erneuert', label: 'Neues Client-Secret', value: result.client_secret, clientId: result.client_id, scopes: target.scopes })
+      setOneTimeSecret({ title: 'Client-Secret erneuert', label: 'Neues Client-Secret', value: result.client_secret, clientId: result.client_id, scopes: target.scopes, canRequestToken: true })
       rotate.reset()
     } catch {
       // Fehler wird oberhalb der Client-Liste angezeigt.
@@ -220,7 +221,7 @@ export function McpAdminPage() {
       <OneTimeSecretDialog
         secret={oneTimeSecret}
         onClose={() => setOneTimeSecret(null)}
-        onRequestToken={oneTimeSecret?.clientId ? () => {
+        onRequestToken={oneTimeSecret?.clientId && oneTimeSecret.canRequestToken ? () => {
           const target = clients.data?.find((item) => item.client_id === oneTimeSecret.clientId) ?? null
           setPrefilledSecret(oneTimeSecret.value)
           setTokenClient(target)

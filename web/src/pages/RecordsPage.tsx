@@ -11,6 +11,11 @@ import { EmptyState, ErrorState } from '../components/States'
 import { PageHeader } from '../components/PageHeader'
 import { formatDate, formatDistance, formatDuration, formatSpeedMps } from '../utils/format'
 
+const recordMethodLabels: Record<string, string> = {
+  distance_record_track_points: 'Trackbasierte Abschnittszeit',
+  distance_record_fallback: 'Gekennzeichnete Schätzung',
+}
+
 export function RecordsPage() {
   const theme = useTheme()
   const records = useQuery({
@@ -76,7 +81,7 @@ export function RecordsPage() {
                 <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, gap: 1.5, mt: 1.5 }}>
                   {records.data.methods.map((method, index) => (
                     <Box key={`${method.name}-${index}`} sx={{ p: 1.5, borderRadius: 3, bgcolor: 'action.hover' }}>
-                      <Typography fontWeight={750}>{method.name}</Typography>
+                      <Typography fontWeight={750}>{recordMethodLabels[method.name] ?? method.name}</Typography>
                       <Typography variant="body2" color="text.secondary" sx={{ mt: .35 }}>{method.description}</Typography>
                     </Box>
                   ))}
@@ -123,7 +128,7 @@ function DistanceRecordCard({ record, rank }: { record: DistanceRecord; rank: nu
             <EmojiEventsRoundedIcon color={rank === 1 ? 'secondary' : 'primary'} />
             <Typography variant="h3">{targetKm.toLocaleString('de-DE')} km</Typography>
           </Stack>
-          {record.estimated && <Chip size="small" variant="outlined" label="interpoliert" />}
+          {record.estimated && <Chip size="small" variant="outlined" label="geschätzt" />}
         </Stack>
         <Typography variant="h2" sx={{ fontSize: '1.8rem', mt: 2 }}>{formatDuration(record.duration_s)}</Typography>
         <Stack direction="row" alignItems="center" gap={.6} sx={{ mt: .5 }}><TimerRoundedIcon sx={{ fontSize: 17, color: 'text.secondary' }} /><Typography variant="body2" color="text.secondary">{formatSpeedMps(record.avg_speed_mps)} im Schnitt</Typography></Stack>

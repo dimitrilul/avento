@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     max_avatar_pixels: int = 20_000_000
     auto_create_schema: bool = True
 
+    # Read-only MCP clients use short-lived opaque tokens. Browser origins are
+    # checked only when a client sends an Origin header; native MCP clients
+    # normally omit it.
+    mcp_access_token_minutes: int = Field(default=10, ge=1, le=15)
+    mcp_allowed_origins: str = "http://localhost,http://127.0.0.1,http://[::1]"
+
     weather_provider: str = "open_meteo"
     weather_timeout_seconds: float = 8.0
     weather_route_samples: int = Field(default=7, ge=3, le=12)

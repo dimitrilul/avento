@@ -6,10 +6,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from . import models  # noqa: F401 - registers SQLAlchemy metadata
+from . import mcp_models, models  # noqa: F401 - registers SQLAlchemy metadata
 from .config import get_settings
 from .database import Base, SessionLocal, engine
-from .routers import activities, activity_photos, auth, chat, insights, profile
+from .routers import activities, activity_photos, auth, chat, insights, mcp, profile
 
 
 settings = get_settings()
@@ -47,6 +47,7 @@ app.include_router(activities.router, prefix="/api/v1")
 app.include_router(activity_photos.router, prefix="/api/v1")
 app.include_router(insights.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
+app.include_router(mcp.router)
 
 
 @app.get("/")

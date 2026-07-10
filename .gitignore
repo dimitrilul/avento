@@ -22,7 +22,7 @@ coverage/
 .gradle/
 **/build/
 local.properties
-docker-compose.yml
+docker-compose.override.yml
 *.jks
 *.keystore
 
@@ -32,6 +32,7 @@ docker-compose.yml
 .DS_Store
 
 # Runtime data
-data/
+/data/
+/backend/data/
 uploads/
 backups/

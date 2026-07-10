@@ -38,6 +38,17 @@ Avento berechnet daraus Gegen-, Rücken- und Seitenwind relativ zur tatsächlich
 Stichproben lässt sich mit `AVENTO_WEATHER_ROUTE_SAMPLES` zwischen 3 und 12 konfigurieren. Ein nicht erreichbarer
 Anbieter verhindert den TCX-Import nicht.
 
+Aktivitäten unterstützen dokumentierte Trinkmengen und mehrere validierte
+Fotos mit optionaler Aufnahmezeit, Position und Bildunterschrift. Die
+Statistik-API stellt persönliche Distanzrekorde, langfristige Kalendertrends,
+robuste Muster und Saison- beziehungsweise Jahresrückblicke bereit. KI-Texte
+enthalten zusätzlich eine strukturierte Datengrundlage.
+
+Der Read-only-MCP-Server ist unter `/api/v1/mcp/rpc` erreichbar. MCP-Clients,
+Scopes, kurzlebige Zugriffstokens und das Audit-Log werden über die
+authentifizierten `/api/v1/mcp/*`-Endpunkte verwaltet. Optional startet
+`python mcp_server.py` denselben Router nur auf der lokalen Loopback-Adresse.
+
 Kalenderzeiträume werden in `AVENTO_TIMEZONE` ausgewertet (Standard: `Europe/Berlin`), sodass Fahrten rund um
 Mitternacht im richtigen lokalen Tag, in der richtigen Woche und im richtigen Monat landen.
 
