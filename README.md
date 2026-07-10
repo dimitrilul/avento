@@ -20,7 +20,8 @@ den ersten Test.
 
 ```bash
 cp .env.example .env
-# POSTGRES_PASSWORD, SECRET_KEY, BOOTSTRAP_INVITE_CODE und PUBLIC_URL setzen
+# POSTGRES_PASSWORD, SECRET_KEY, BOOTSTRAP_INVITE_CODE und PUBLIC_URL setzen.
+# POSTGRES_PASSWORD bitte als langen zufälligen alphanumerischen Wert wählen.
 newgrp docker
 docker compose up --build -d
 ```

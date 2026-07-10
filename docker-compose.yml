@@ -1,3 +1,5 @@
+name: avento
+
 services:
   database:
     image: postgres:17-alpine
@@ -5,27 +7,30 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-avento}
       POSTGRES_USER: ${POSTGRES_USER:-avento}
-      POSTGRES_PASSWORD: "Dimadima2.."
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD in .env setzen}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-avento} -d ${POSTGRES_DB:-avento}"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 12
+      start_period: 10s
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
     restart: unless-stopped
+    init: true
     environment:
       AVENTO_ENVIRONMENT: production
-      AVENTO_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-avento}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB:-avento}
-      AVENTO_SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
-      AVENTO_BOOTSTRAP_INVITE_CODE: ${BOOTSTRAP_INVITE_CODE:?Set BOOTSTRAP_INVITE_CODE in .env}
+      AVENTO_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-avento}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD in .env setzen}@database:5432/${POSTGRES_DB:-avento}
+      AVENTO_SECRET_KEY: ${SECRET_KEY:?SECRET_KEY in .env setzen}
+      AVENTO_BOOTSTRAP_INVITE_CODE: ${BOOTSTRAP_INVITE_CODE:?BOOTSTRAP_INVITE_CODE in .env setzen}
       AVENTO_UPLOAD_DIR: /var/lib/avento/uploads
       AVENTO_CORS_ORIGINS: ${PUBLIC_URL:-http://localhost}
       AVENTO_AUTO_CREATE_SCHEMA: "false"
-      AVENTO_WEATHER_PROVIDER: open_meteo
+      AVENTO_WEATHER_PROVIDER: ${WEATHER_PROVIDER:-open_meteo}
       AVENTO_OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       AVENTO_OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.4-mini}
       AVENTO_OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
@@ -35,21 +40,31 @@ services:
       database:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
       interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 6
+      start_period: 20s
 
   web:
-    build: ./web
+    build:
+      context: ./web
+      args:
+        VITE_API_URL: /api/v1
     restart: unless-stopped
     depends_on:
       backend:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
 
   gateway:
     image: caddy:2-alpine
     restart: unless-stopped
+    init: true
     environment:
       PUBLIC_URL: ${PUBLIC_URL:-http://localhost}
     ports:
@@ -60,7 +75,8 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - web
+      web:
+        condition: service_healthy
 
 volumes:
   postgres_data:
