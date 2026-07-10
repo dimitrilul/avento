@@ -55,9 +55,10 @@ Android:
 
 ```bash
 cd android
-./gradlew testDebugUnitTest assembleDebug \
-  -Pavento.apiBaseUrl=http://10.0.2.2:8000/api/v1/
+./gradlew testDebugUnitTest assembleDebug
 ```
+
+Beim ersten Start fragt die App nach der Adresse des Avento-Servers.
 
 Die erzeugte Debug-APK liegt nach dem Build unter
 `android/app/build/outputs/apk/debug/app-debug.apk`. Weitere Android-Hinweise

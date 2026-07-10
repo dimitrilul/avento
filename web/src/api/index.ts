@@ -121,6 +121,8 @@ export const activitiesApi = {
   },
   update: (id: string, data: ActivityUpdate) =>
     apiRequest<ActivityDetail>(`/activities/${id}`, { method: 'PATCH', body: data }),
+  reanalyze: (id: string) =>
+    apiRequest<ActivityDetail>(`/activities/${id}/reanalyze`, { method: 'POST' }),
   delete: (id: string) => apiRequest<void>(`/activities/${id}`, { method: 'DELETE' }),
   track: (id: string) => apiRequest<TrackResponse>(`/activities/${id}/track`),
   weather: (id: string) => apiRequest<WeatherResponse>(`/activities/${id}/weather`),

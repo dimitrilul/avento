@@ -6,6 +6,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -17,12 +18,14 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import de.avento.app.AppContainer
+import de.avento.app.ServerState
 import de.avento.app.data.network.toGermanMessage
 import de.avento.app.ui.auth.AuthViewModel
 import de.avento.app.ui.auth.LoginScreen
 import de.avento.app.ui.auth.PasswordResetScreen
 import de.avento.app.ui.auth.RegistrationMode
 import de.avento.app.ui.auth.RegistrationScreen
+import de.avento.app.ui.auth.ServerSetupScreen
 import de.avento.app.ui.dashboard.DashboardScreen
 import de.avento.app.ui.dashboard.DashboardViewModel
 import de.avento.app.ui.detail.DetailScreen
@@ -41,8 +44,23 @@ private object Routes {
 
 @Composable
 fun AventoApp(container: AppContainer) {
-    val initiallyAuthenticated by produceState<Boolean?>(null, container.repository) {
-        value = runCatching { container.repository.currentSession() != null }.getOrDefault(false)
+    val serverState by container.serverState.collectAsStateWithLifecycle()
+    when (val state = serverState) {
+        ServerState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        ServerState.Missing -> ServerSetupScreen(onSave = container::configureServer)
+        is ServerState.Connected -> key(state.serverUrl) {
+            ConnectedAventoApp(container, state)
+        }
+    }
+}
+
+@Composable
+private fun ConnectedAventoApp(container: AppContainer, connection: ServerState.Connected) {
+    val repository = connection.repository
+    val initiallyAuthenticated by produceState<Boolean?>(null, repository) {
+        value = runCatching { repository.currentSession() != null }.getOrDefault(false)
     }
     if (initiallyAuthenticated == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -50,7 +68,7 @@ fun AventoApp(container: AppContainer) {
     }
 
     val navController = rememberNavController()
-    val sessionPresent by container.repository.session.map { it != null }
+    val sessionPresent by repository.session.map { it != null }
         .collectAsStateWithLifecycle(initialValue = initiallyAuthenticated == true)
     LaunchedEffect(sessionPresent) {
         if (!sessionPresent && navController.currentDestination?.route !in setOf(
@@ -63,14 +81,14 @@ fun AventoApp(container: AppContainer) {
             navController.navigate(Routes.Login) { popUpTo(0) }
         }
     }
-    val errorMapper: (Throwable) -> String = { it.toGermanMessage(container.errorMoshi) }
+    val errorMapper: (Throwable) -> String = { it.toGermanMessage(connection.errorMoshi) }
     NavHost(
         navController = navController,
         startDestination = if (initiallyAuthenticated == true) Routes.Dashboard else Routes.Login,
     ) {
         composable(Routes.Login) {
             val vm: AuthViewModel = viewModel(factory = SimpleViewModelFactory {
-                AuthViewModel(container.repository, errorMapper)
+                AuthViewModel(repository, errorMapper)
             })
             LoginScreen(
                 viewModel = vm,
@@ -78,11 +96,13 @@ fun AventoApp(container: AppContainer) {
                 onRegister = { navController.navigate(Routes.Register) },
                 onResetPassword = { navController.navigate(Routes.PasswordReset) },
                 onBootstrap = { navController.navigate(Routes.Bootstrap) },
+                serverUrl = connection.serverUrl,
+                onChangeServer = container::forgetServer,
             )
         }
         composable(Routes.PasswordReset) {
             val vm: AuthViewModel = viewModel(factory = SimpleViewModelFactory {
-                AuthViewModel(container.repository, errorMapper)
+                AuthViewModel(repository, errorMapper)
             })
             PasswordResetScreen(
                 viewModel = vm,
@@ -92,7 +112,7 @@ fun AventoApp(container: AppContainer) {
         }
         composable(Routes.Register) {
             val vm: AuthViewModel = viewModel(factory = SimpleViewModelFactory {
-                AuthViewModel(container.repository, errorMapper)
+                AuthViewModel(repository, errorMapper)
             })
             RegistrationScreen(
                 mode = RegistrationMode.Invitation,
@@ -103,7 +123,7 @@ fun AventoApp(container: AppContainer) {
         }
         composable(Routes.Bootstrap) {
             val vm: AuthViewModel = viewModel(factory = SimpleViewModelFactory {
-                AuthViewModel(container.repository, errorMapper)
+                AuthViewModel(repository, errorMapper)
             })
             RegistrationScreen(
                 mode = RegistrationMode.Bootstrap,
@@ -114,7 +134,7 @@ fun AventoApp(container: AppContainer) {
         }
         composable(Routes.Dashboard) {
             val vm: DashboardViewModel = viewModel(factory = SimpleViewModelFactory {
-                DashboardViewModel(container.repository, errorMapper)
+                DashboardViewModel(repository, errorMapper)
             })
             val pendingImport by container.pendingImport.collectAsStateWithLifecycle()
             DashboardScreen(
@@ -134,7 +154,7 @@ fun AventoApp(container: AppContainer) {
         ) { entry ->
             val id = requireNotNull(entry.arguments?.getString("activityId"))
             val vm: DetailViewModel = viewModel(factory = SimpleViewModelFactory {
-                DetailViewModel(id, container.repository, errorMapper)
+                DetailViewModel(id, repository, errorMapper)
             })
             DetailScreen(
                 viewModel = vm,

@@ -24,6 +24,12 @@ def _hours(seconds: float) -> str:
 
 
 def _activity_facts(activity: Activity) -> dict[str, Any]:
+    weather = activity.weather or None
+    if weather:
+        weather = {
+            key: round(value, 1) if isinstance(value, float) else value
+            for key, value in weather.items()
+        }
     return {
         "title": activity.title,
         "type": activity.activity_type,
@@ -34,11 +40,10 @@ def _activity_facts(activity: Activity) -> dict[str, Any]:
         "elevation_gain_m": round(activity.elevation_gain_m),
         "average_speed_kmh": round(activity.avg_speed_mps * 3.6, 1),
         "maximum_speed_kmh": round(activity.max_speed_mps * 3.6, 1),
-        "average_heart_rate_bpm": activity.avg_hr_bpm,
+        "average_heart_rate_bpm": round(activity.avg_hr_bpm) if activity.avg_hr_bpm is not None else None,
         "maximum_heart_rate_bpm": activity.max_hr_bpm,
-        "training_load": activity.training_load,
         "heart_rate_zone_seconds": activity.hr_zone_seconds,
-        "weather": activity.weather,
+        "weather": weather,
     }
 
 
@@ -85,7 +90,9 @@ class OpenAISummaryProvider(SummaryProvider):
             instructions=(
                 "Du bist ein sachlicher deutschsprachiger Radsport-Coach. Fasse die Aktivität in 3 bis 5 "
                 "kurzen Sätzen zusammen. Nenne nur Werte aus den Daten, vermeide medizinische Aussagen und "
-                "kennzeichne fehlende Sensorwerte nicht als null."
+                "kennzeichne fehlende Sensorwerte nicht als null. Runde Herzfrequenz und Höhenmeter auf ganze "
+                "Zahlen und alle anderen Dezimalwerte auf höchstens eine Nachkommastelle. Erwähne keine "
+                "Trainingsbelastung, da dieser Wert ohne persönliche Kalibrierung nicht aussagekräftig ist."
             ),
             input=f"Aktivitätsdaten: {_activity_facts(activity)}",
             max_output_tokens=400,
@@ -100,4 +107,3 @@ def get_summary_provider(settings: Settings) -> SummaryProvider:
     if settings.openai_api_key:
         return OpenAISummaryProvider(settings)
     return LocalSummaryProvider()
-

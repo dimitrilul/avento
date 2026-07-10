@@ -174,9 +174,6 @@ private fun ActivityContent(
         if (points.any { it.speedMps != null }) {
             item { ChartCard { LineChart("Geschwindigkeit", points.map { it.speedMps?.times(3.6) }, "km/h") } }
         }
-        if (points.any { it.power != null }) {
-            item { ChartCard { LineChart("Leistung", points.map { it.power }, "W") } }
-        }
         activity.notes?.takeIf { it.isNotBlank() }?.let { notes ->
             item { Card { Column(Modifier.padding(16.dp)) { Text("Notizen", fontWeight = FontWeight.Bold); Text(notes) } } }
         }
@@ -189,8 +186,8 @@ private fun MetricGrid(activity: Activity) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             MetricRow("Distanz", activity.distanceMeters.asDistance(), "Bewegungszeit", activity.movingTimeSeconds.asDuration())
             MetricRow("Ø Geschwindigkeit", activity.averageSpeedMps.asSpeed(), "Höhenmeter", activity.elevationGainMeters.asElevation())
-            MetricRow("Ø Herzfrequenz", activity.averageHeartRate.asInteger("bpm"), "Ø Leistung", activity.averagePower.asInteger("W"))
-            MetricRow("Max. Tempo", activity.maxSpeedMps.asSpeed(), "Trainingslast", activity.trainingLoad.asInteger(""))
+            MetricRow("Ø Herzfrequenz", activity.averageHeartRate.asInteger("bpm"), "Max. Herzfrequenz", activity.maxHeartRate.asInteger("bpm"))
+            MetricRow("Max. Tempo", activity.maxSpeedMps.asSpeed(), "Gesamtzeit", activity.durationSeconds.asDuration())
         }
     }
 }

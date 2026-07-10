@@ -27,7 +27,7 @@ from ..schemas import (
     TrackResponse,
     WeatherResponse,
 )
-from ..tcx import TcxError, parse_tcx
+from ..tcx import ParsedActivity, TcxError, parse_tcx
 from ..weather import get_weather_provider
 
 
@@ -99,6 +99,30 @@ def _refresh_weather(activity: Activity) -> None:
     activity.weather_updated_at = utcnow()
 
 
+def _apply_analysis(activity: Activity, parsed: ParsedActivity) -> None:
+    activity.started_at = parsed.started_at
+    activity.ended_at = parsed.ended_at
+    activity.distance_m = parsed.distance_m
+    activity.duration_s = parsed.duration_s
+    activity.moving_time_s = parsed.moving_time_s
+    activity.pause_time_s = parsed.pause_time_s
+    activity.avg_speed_mps = parsed.avg_speed_mps
+    activity.max_speed_mps = parsed.max_speed_mps
+    activity.elevation_gain_m = parsed.elevation_gain_m
+    activity.avg_hr_bpm = parsed.avg_hr_bpm
+    activity.max_hr_bpm = parsed.max_hr_bpm
+    activity.avg_cadence_rpm = parsed.avg_cadence_rpm
+    activity.max_cadence_rpm = parsed.max_cadence_rpm
+    activity.avg_power_w = parsed.avg_power_w
+    activity.max_power_w = parsed.max_power_w
+    activity.training_load = parsed.training_load
+    activity.hr_zone_seconds = parsed.hr_zone_seconds
+    activity.track_points = parsed.track_points
+    activity.ai_summary = None
+    activity.ai_provider = None
+    activity.ai_updated_at = None
+
+
 @router.post("/activities", response_model=ActivityResponse, status_code=status.HTTP_201_CREATED)
 async def upload_activity(
     file: UploadFile = File(...),
@@ -142,23 +166,8 @@ async def upload_activity(
         notes=notes.strip() if notes and notes.strip() else None,
         started_at=parsed.started_at,
         ended_at=parsed.ended_at,
-        distance_m=parsed.distance_m,
-        duration_s=parsed.duration_s,
-        moving_time_s=parsed.moving_time_s,
-        pause_time_s=parsed.pause_time_s,
-        avg_speed_mps=parsed.avg_speed_mps,
-        max_speed_mps=parsed.max_speed_mps,
-        elevation_gain_m=parsed.elevation_gain_m,
-        avg_hr_bpm=parsed.avg_hr_bpm,
-        max_hr_bpm=parsed.max_hr_bpm,
-        avg_cadence_rpm=parsed.avg_cadence_rpm,
-        max_cadence_rpm=parsed.max_cadence_rpm,
-        avg_power_w=parsed.avg_power_w,
-        max_power_w=parsed.max_power_w,
-        training_load=parsed.training_load,
-        hr_zone_seconds=parsed.hr_zone_seconds,
-        track_points=parsed.track_points,
     )
+    _apply_analysis(activity, parsed)
     _refresh_weather(activity)
     db.add(activity)
     try:
@@ -241,6 +250,27 @@ def update_activity(
         activity.activity_type = values["type"].strip().lower()
     if "notes" in values:
         activity.notes = values["notes"].strip() if values["notes"] and values["notes"].strip() else None
+    db.commit()
+    db.refresh(activity)
+    return _activity_response(activity)
+
+
+@router.post("/activities/{activity_id}/reanalyze", response_model=ActivityResponse)
+def reanalyze_activity(
+    activity_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ActivityResponse:
+    activity = _activity_for_user(db, current_user, activity_id)
+    try:
+        data = Path(activity.original_file_path).read_bytes()
+    except OSError as exc:
+        raise HTTPException(status_code=409, detail="Die ursprüngliche TCX-Datei ist nicht mehr verfügbar.") from exc
+    try:
+        parsed = parse_tcx(data, current_user.hr_zones or [], current_user.hr_max)
+    except TcxError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    _apply_analysis(activity, parsed)
     db.commit()
     db.refresh(activity)
     return _activity_response(activity)

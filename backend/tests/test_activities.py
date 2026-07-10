@@ -46,6 +46,11 @@ def test_activity_crud_analysis_weather_summary_and_statistics(client: TestClien
     assert summary.json()["provider"] == "local"
     assert "0.6 km" in summary.json()["summary"]
 
+    reanalyzed = client.post(f"/api/v1/activities/{activity_id}/reanalyze", headers=auth)
+    assert reanalyzed.status_code == 200
+    assert reanalyzed.json()["elevation_gain_m"] == 10
+    assert reanalyzed.json()["ai_summary"] is None
+
     stats = client.get("/api/v1/statistics/overview", headers=auth)
     assert stats.status_code == 200
     assert stats.json()["activity_count"] == 1
@@ -75,4 +80,3 @@ def test_users_cannot_access_each_others_activities(client: TestClient, auth: di
     second = {"Authorization": f"Bearer {registration.json()['access_token']}"}
     assert client.get(f"/api/v1/activities/{activity_id}", headers=second).status_code == 404
     assert client.get("/api/v1/activities", headers=second).json()["total"] == 0
-

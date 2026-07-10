@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded'
+import AutorenewRoundedIcon from '@mui/icons-material/AutorenewRounded'
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded'
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded'
@@ -9,7 +10,6 @@ import LandscapeRoundedIcon from '@mui/icons-material/LandscapeRounded'
 import RouteRoundedIcon from '@mui/icons-material/RouteRounded'
 import SpeedRoundedIcon from '@mui/icons-material/SpeedRounded'
 import TimerRoundedIcon from '@mui/icons-material/TimerRounded'
-import WhatshotRoundedIcon from '@mui/icons-material/WhatshotRounded'
 import {
   Alert,
   Box,
@@ -49,7 +49,6 @@ import {
   formatDuration,
   formatElevation,
   formatHeartRate,
-  formatPower,
   formatSpeedMps,
 } from '../utils/format'
 
@@ -68,6 +67,18 @@ export function ActivityDetailPage() {
     onSuccess: async () => {
       await Promise.all([client.invalidateQueries({ queryKey: ['activities'] }), client.invalidateQueries({ queryKey: ['statistics'] })])
       navigate('/aktivitaeten', { replace: true })
+    },
+  })
+  const reanalyze = useMutation({
+    mutationFn: () => activitiesApi.reanalyze(id),
+    onSuccess: async (updated) => {
+      client.setQueryData(['activity', id], updated)
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ['activity', id, 'track'] }),
+        client.invalidateQueries({ queryKey: ['activity', id, 'summary'] }),
+        client.invalidateQueries({ queryKey: ['activities'] }),
+        client.invalidateQueries({ queryKey: ['statistics'] }),
+      ])
     },
   })
 
@@ -89,18 +100,22 @@ export function ActivityDetailPage() {
           {item.original_filename && <Typography variant="caption" color="text.secondary">Importiert aus {item.original_filename}</Typography>}
         </Box>
         <Stack direction="row" gap={1} flexWrap="wrap">
+          <Button variant="outlined" startIcon={<AutorenewRoundedIcon />} disabled={reanalyze.isPending} onClick={() => reanalyze.mutate()}>
+            {reanalyze.isPending ? 'Wird neu berechnet …' : 'Analyse neu berechnen'}
+          </Button>
           <Button variant="outlined" startIcon={<EditRoundedIcon />} onClick={() => setEditOpen(true)}>Bearbeiten</Button>
           <Button variant="contained" startIcon={<DownloadRoundedIcon />} onClick={() => setExportOpen(true)}>PNG-Overlay</Button>
         </Stack>
       </Stack>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(3, 1fr)', xl: 'repeat(6, 1fr)' }, gap: 1.5, mb: 3 }}>
+      {reanalyze.isError && <Alert severity="error" sx={{ mb: 2 }}>{errorMessage(reanalyze.error)}</Alert>}
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(3, 1fr)', xl: 'repeat(5, 1fr)' }, gap: 1.5, mb: 3 }}>
         <MetricCard label="Distanz" value={formatDistance(item.distance_m)} icon={<RouteRoundedIcon />} accent={theme.palette.chart.blue} />
         <MetricCard label="Bewegungszeit" value={formatDuration(item.moving_time_s)} icon={<TimerRoundedIcon />} accent={theme.palette.chart.teal} />
         <MetricCard label="Höhenmeter" value={formatElevation(item.elevation_gain_m)} icon={<LandscapeRoundedIcon />} accent={theme.palette.chart.lime} />
         <MetricCard label="Ø Tempo" value={formatSpeedMps(item.avg_speed_mps)} icon={<SpeedRoundedIcon />} accent={theme.palette.chart.amber} />
         <MetricCard label="Ø Herzfrequenz" value={formatHeartRate(item.avg_hr_bpm)} icon={<FavoriteRoundedIcon />} accent={theme.palette.chart.coral} />
-        <MetricCard label="Ø Leistung" value={formatPower(item.avg_power_w)} icon={<WhatshotRoundedIcon />} accent={theme.palette.chart.amber} />
       </Box>
 
       <Card sx={{ overflow: 'hidden', mb: 3 }}>

@@ -2,21 +2,22 @@
 
 Native Android-App mit Kotlin, Jetpack Compose und Material 3. Die App verwendet
 dieselbe REST-API wie die Web-App und speichert keine Aktivitäten dauerhaft auf
-dem Gerät. Nur die Sitzungstoken werden in DataStore abgelegt und vorher mit einem
-nicht exportierbaren AES-Schlüssel aus dem Android Keystore verschlüsselt.
+dem Gerät. Die Server-Adresse wird in DataStore gespeichert. Sitzungstoken werden
+zusätzlich mit einem nicht exportierbaren AES-Schlüssel aus dem Android Keystore
+verschlüsselt.
 
 ## Lokaler Start
 
 Voraussetzungen: JDK 17 oder neuer, Android SDK 36 und Build Tools 36.0.0.
 
 ```bash
-./gradlew testDebugUnitTest assembleDebug \
-  -Pavento.apiBaseUrl=http://10.0.2.2:8000/api/v1/
+./gradlew testDebugUnitTest assembleDebug
 ```
 
-`10.0.2.2` verweist im Android-Emulator auf den Entwicklungsrechner. Für Release-
-Builds muss eine HTTPS-URL angegeben werden. Klartext-HTTP ist nur im Debug-Build
-freigeschaltet.
+Beim ersten Start muss die Adresse des Avento-Servers eingegeben werden, zum
+Beispiel `https://avento.example.de`. `/api/v1/` wird automatisch ergänzt. Die
+Adresse kann auf der Anmeldeseite später geändert werden. HTTPS wird empfohlen;
+für lokale Entwicklungsserver wird auch HTTP unterstützt.
 
 ## Import
 
@@ -34,7 +35,7 @@ Sitzungsverwaltung im Benutzerprofil ergänzt werden.
 
 ## API-Vertrag
 
-Die konfigurierte Basis-URL muss auf `/api/v1/` enden. Verwendet werden die
+Die gespeicherte Basis-URL endet normalisiert auf `/api/v1/`. Verwendet werden die
 Auth-Endpunkte für Login, Refresh, Einladung und Bootstrap (einschließlich
 `bootstrap_code`) sowie den Token-basierten Passwort-Reset. Ein angemeldeter
 Passwortwechsel ist außerdem über `profile/password` im Repository verfügbar.

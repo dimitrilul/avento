@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import statistics
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -103,6 +104,46 @@ def _mean(values: list[int | float]) -> float | None:
     return round(sum(values) / len(values), 2) if values else None
 
 
+def _elevation_gain(altitudes: list[float], threshold_m: float = 2.0) -> float:
+    """Calculate ascent from a smoothed altitude profile.
+
+    TCX devices commonly record many points per minute. Summing only individual
+    changes above one metre therefore loses long, gentle climbs. A short median
+    filter removes isolated GPS/barometer spikes; the threshold is then applied
+    to the accumulated climb instead of to every single trackpoint.
+    """
+    if len(altitudes) < 2:
+        return 0.0
+
+    radius = 2
+    smoothed = altitudes if len(altitudes) < 5 else [
+        statistics.median(altitudes[max(0, index - radius) : index + radius + 1])
+        for index in range(len(altitudes))
+    ]
+    gain = 0.0
+    valley = peak = smoothed[0]
+    climbing = False
+
+    for altitude in smoothed[1:]:
+        if climbing:
+            if altitude > peak:
+                peak = altitude
+            elif peak - altitude >= threshold_m:
+                gain += max(0.0, peak - valley)
+                valley = peak = altitude
+                climbing = False
+        else:
+            if altitude < valley:
+                valley = peak = altitude
+            elif altitude - valley >= threshold_m:
+                peak = altitude
+                climbing = True
+
+    if climbing:
+        gain += max(0.0, peak - valley)
+    return gain
+
+
 def parse_tcx(data: bytes, zones: list[dict[str, Any]], fallback_hr_max: int = 190) -> ParsedActivity:
     try:
         root = DefusedET.fromstring(data)
@@ -161,10 +202,8 @@ def parse_tcx(data: bytes, zones: list[dict[str, Any]], fallback_hr_max: int = 1
 
     distance = 0.0
     moving_time = 0.0
-    elevation_gain = 0.0
     speeds: list[float] = []
     zone_seconds = {str(zone["name"]): 0.0 for zone in zones}
-    previous_altitude: float | None = None
     output_points: list[dict[str, Any]] = []
 
     for index, point in enumerate(raw_points):
@@ -196,12 +235,6 @@ def parse_tcx(data: bytes, zones: list[dict[str, Any]], fallback_hr_max: int = 1
                     zone_seconds[str(matching["name"])] += delta_seconds
 
         altitude = point["altitude_m"]
-        if altitude is not None and previous_altitude is not None:
-            gain = altitude - previous_altitude
-            if 1 <= gain <= 100:
-                elevation_gain += gain
-        if altitude is not None:
-            previous_altitude = altitude
 
         speed_value = point["source_speed_mps"]
         if speed_value is None and index and delta_seconds > 0:
@@ -240,7 +273,10 @@ def parse_tcx(data: bytes, zones: list[dict[str, Any]], fallback_hr_max: int = 1
         pause_time_s=round(max(0.0, duration - moving_time), 2),
         avg_speed_mps=round(distance / moving_time, 3) if moving_time else 0.0,
         max_speed_mps=round(max(speeds), 3) if speeds else 0.0,
-        elevation_gain_m=round(elevation_gain, 2),
+        elevation_gain_m=round(
+            _elevation_gain([point["altitude_m"] for point in raw_points if point["altitude_m"] is not None]),
+            2,
+        ),
         avg_hr_bpm=_mean(hr_values),
         max_hr_bpm=max(hr_values) if hr_values else None,
         avg_cadence_rpm=_mean(cadence_values),

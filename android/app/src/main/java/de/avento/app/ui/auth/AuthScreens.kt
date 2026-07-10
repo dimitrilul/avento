@@ -48,6 +48,8 @@ fun LoginScreen(
     onRegister: () -> Unit,
     onResetPassword: () -> Unit,
     onBootstrap: () -> Unit,
+    serverUrl: String,
+    onChangeServer: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var email by remember { mutableStateOf("") }
@@ -67,6 +69,13 @@ fun LoginScreen(
             Column(Modifier.widthIn(max = 460.dp)) {
                 Text("Avento", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
                 Text("Deine Radfahrten. Klar analysiert.", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Server: ${serverUrl.removeSuffix("api/v1/").removeSuffix("/")}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(onClick = onChangeServer) { Text("Server ändern") }
                 Spacer(Modifier.height(32.dp))
                 OutlinedTextField(
                     value = email,
