@@ -18,12 +18,12 @@ export function MetricCard({
   hint?: string
 }) {
   return (
-    <Card sx={{ height: '100%' }}>
+    <Card sx={{ height: '100%', position: 'relative', overflow: 'hidden', '&::after': { content: '""', position: 'absolute', inset: 'auto 0 0', height: 3, bgcolor: accent, opacity: .8 } }}>
       <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
         <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
           <Box>
             <Typography variant="body2" color="text.secondary" fontWeight={650}>{label}</Typography>
-            <Typography variant="h3" sx={{ mt: 1, fontSize: '1.65rem' }}>{value}</Typography>
+            <Typography variant="h3" sx={{ mt: 1, fontSize: { xs: '1.3rem', sm: '1.65rem' }, lineHeight: 1.15 }}>{value}</Typography>
           </Box>
           <Box sx={{ width: 44, height: 44, borderRadius: 3, display: 'grid', placeItems: 'center', color: accent, bgcolor: alpha(accent, .1) }}>
             {icon}
@@ -35,8 +35,8 @@ export function MetricCard({
               <Chip
                 size="small"
                 icon={delta >= 0 ? <ArrowUpwardRoundedIcon /> : <ArrowDownwardRoundedIcon />}
-                label={`${Math.abs(delta).toLocaleString('de-DE', { maximumFractionDigits: 0 })} %`}
-                sx={{ bgcolor: delta >= 0 ? 'rgba(50,120,70,.1)' : 'rgba(186,26,26,.08)', color: delta >= 0 ? 'success.dark' : 'error.main' }}
+                label={`${delta >= 0 ? '+' : '−'}${Math.abs(delta).toLocaleString('de-DE', { maximumFractionDigits: 0 })} %`}
+                sx={{ bgcolor: delta >= 0 ? 'rgba(50,160,90,.12)' : 'rgba(220,90,80,.1)', color: delta >= 0 ? 'success.main' : 'error.main' }}
               />
             )}
             {hint && <Typography variant="caption" color="text.secondary">{hint}</Typography>}

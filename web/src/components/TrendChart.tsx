@@ -1,31 +1,25 @@
+import { useId } from 'react'
 import { useTheme } from '@mui/material'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import type { TrendPoint } from '../api'
 
-export function TrendChart({ data }: { data: TrendPoint[] }) {
+export function TrendChart({ data }: { data: Array<{ label: string; distance_km: number }> }) {
   const theme = useTheme()
-  const formatted = data.map((point) => ({
-    ...point,
-    distance_km: point.distance_m / 1000,
-    label: new Intl.DateTimeFormat('de-DE', { month: 'short', year: '2-digit' }).format(new Date(`${point.month}-01T12:00:00`)),
-  }))
+  const gradientId = `distance-fill-${useId().replaceAll(':', '')}`
   return (
-    <ResponsiveContainer width="100%" height={290}>
-      <AreaChart data={formatted} margin={{ top: 12, right: 6, bottom: 0, left: 0 }}>
+    <ResponsiveContainer width="100%" height={310}>
+      <AreaChart data={data} margin={{ top: 12, right: 6, bottom: 0, left: -8 }}>
         <defs>
-          <linearGradient id="distanceFill" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor={theme.palette.primary.main} stopOpacity={.32} />
-            <stop offset="100%" stopColor={theme.palette.primary.main} stopOpacity={.02} />
+          <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor={theme.palette.primary.main} stopOpacity={.42} />
+            <stop offset="72%" stopColor={theme.palette.primary.main} stopOpacity={.08} />
+            <stop offset="100%" stopColor={theme.palette.primary.main} stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="4 4" vertical={false} stroke={theme.palette.divider} />
-        <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: theme.palette.text.secondary, fontSize: 12 }} />
-        <YAxis width={54} unit=" km" axisLine={false} tickLine={false} tick={{ fill: theme.palette.text.secondary, fontSize: 12 }} />
-        <Tooltip
-          formatter={(value) => [`${Number(value).toLocaleString('de-DE', { maximumFractionDigits: 1 })} km`, 'Distanz']}
-          contentStyle={{ borderRadius: 14, border: `1px solid ${theme.palette.divider}`, boxShadow: '0 12px 30px rgba(20,50,45,.08)' }}
-        />
-        <Area type="monotone" dataKey="distance_km" stroke={theme.palette.primary.main} strokeWidth={3} fill="url(#distanceFill)" activeDot={{ r: 5 }} />
+        <CartesianGrid strokeDasharray="3 6" vertical={false} stroke={theme.palette.divider} />
+        <XAxis dataKey="label" axisLine={false} tickLine={false} minTickGap={22} tick={{ fill: theme.palette.text.secondary, fontSize: 11 }} />
+        <YAxis width={52} unit=" km" axisLine={false} tickLine={false} tick={{ fill: theme.palette.text.secondary, fontSize: 11 }} />
+        <Tooltip cursor={{ stroke: theme.palette.primary.main, strokeDasharray: '4 4' }} formatter={(value) => [`${Number(value).toLocaleString('de-DE', { maximumFractionDigits: 1 })} km`, 'Distanz']} contentStyle={{ background: theme.palette.background.paper, color: theme.palette.text.primary, borderRadius: 14, border: `1px solid ${theme.palette.divider}`, boxShadow: '0 16px 34px rgba(0,0,0,.2)' }} />
+        <Area type="monotone" dataKey="distance_km" stroke={theme.palette.primary.main} strokeWidth={3} fill={`url(#${gradientId})`} activeDot={{ r: 5, strokeWidth: 3, fill: theme.palette.background.paper }} />
       </AreaChart>
     </ResponsiveContainer>
   )

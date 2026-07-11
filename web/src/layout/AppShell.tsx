@@ -134,8 +134,8 @@ export function AppShell() {
           {!desktop && <Brand compact />}
           <Box sx={{ flex: 1 }} />
           <ThemeModeToggle />
-          <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => setUploadOpen(true)}>
-            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Aktivität </Box>importieren
+          <Button aria-label="Aktivität importieren" variant="contained" startIcon={<AddRoundedIcon />} onClick={() => setUploadOpen(true)} sx={{ minWidth: { xs: 44, sm: 'auto' }, px: { xs: 1.25, sm: 2 } }}>
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Aktivität importieren</Box>
           </Button>
         </Toolbar>
       </AppBar>
