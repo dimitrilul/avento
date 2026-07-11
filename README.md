@@ -6,6 +6,8 @@ greifen auf dasselbe FastAPI-Backend zu. Importierte TCX-Dateien werden
 serverseitig gespeichert, analysiert, entlang der Strecke mit historischen Wetterdaten angereichert
 und optional durch einen persönlichen KI-Coach ausgewertet.
 
+> Hinweis: Dieses Projekt ist zu 100 % gevibecodet.
+
 ## Komponenten
 
 - `backend/`: FastAPI, SQLAlchemy, PostgreSQL, TCX-Analyse, Open-Meteo, OpenAI und Read-only-MCP
