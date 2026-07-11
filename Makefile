@@ -1,7 +1,12 @@
-.PHONY: up down logs test backup
+.PHONY: up deploy down logs test backup
 
 up:
 	docker compose up --build -d
+
+deploy:
+	git pull
+	docker compose pull
+	docker compose up -d --remove-orphans
 
 down:
 	docker compose down
