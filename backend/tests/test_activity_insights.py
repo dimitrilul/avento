@@ -5,12 +5,14 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
+from time import perf_counter
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 from PIL import Image
 from sqlalchemy import select
 
+from app.analysis import fastest_distance_effort
 from app.config import get_settings
 from app.database import SessionLocal
 from app.models import Activity, ActivityPhoto
@@ -334,6 +336,28 @@ def _track(started_at: datetime, distances_and_seconds: list[tuple[float, float]
         }
         for distance, seconds in distances_and_seconds
     ]
+
+
+def test_distance_record_scales_to_large_tracks():
+    started_at = datetime(2025, 5, 1, 8, tzinfo=timezone.utc)
+    point_count = 30_001
+    activity = SimpleNamespace(
+        distance_m=float(point_count - 1),
+        avg_speed_mps=10.0,
+        track_points=_track(
+            started_at,
+            [(float(index), index / 10) for index in range(point_count)],
+        ),
+    )
+
+    started = perf_counter()
+    effort = fastest_distance_effort(activity, 10_000)
+    elapsed = perf_counter() - started
+
+    assert effort is not None
+    assert effort["duration_s"] == 1_000
+    assert effort["estimated"] is False
+    assert elapsed < 2
 
 
 def test_personal_records_prefer_interpolated_track_points(client: TestClient, auth: dict[str, str]):

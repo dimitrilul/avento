@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from bisect import bisect_left, bisect_right
 from datetime import datetime
 from statistics import mean
 from typing import Any, Iterable
@@ -423,11 +424,19 @@ def _time_at_distance(
     target_distance: float,
     *,
     latest_exact: bool,
+    distances: list[float] | None = None,
 ) -> float | None:
-    exact = [seconds for distance, seconds in timeline if abs(distance - target_distance) <= 1e-6]
-    if exact:
-        return max(exact) if latest_exact else min(exact)
-    for (distance_a, seconds_a), (distance_b, seconds_b) in zip(timeline, timeline[1:]):
+    if not timeline:
+        return None
+    indexed_distances = distances if distances is not None else [distance for distance, _ in timeline]
+    left = bisect_left(indexed_distances, target_distance)
+    right = bisect_right(indexed_distances, target_distance)
+    if left < right:
+        index = right - 1 if latest_exact else left
+        return timeline[index][1]
+    if 0 < left < len(timeline):
+        distance_a, seconds_a = timeline[left - 1]
+        distance_b, seconds_b = timeline[left]
         if distance_a < target_distance < distance_b:
             fraction = (target_distance - distance_a) / (distance_b - distance_a)
             return seconds_a + fraction * (seconds_b - seconds_a)
@@ -440,6 +449,7 @@ def fastest_distance_effort(activity: Activity, target_distance_m: float) -> dic
         return None
     timeline = _distance_timeline(activity)
     if len(timeline) >= 2 and timeline[-1][0] - timeline[0][0] + 1 >= target_distance_m:
+        distances = [distance for distance, _ in timeline]
         minimum = timeline[0][0]
         maximum = timeline[-1][0]
         candidate_starts = {
@@ -455,8 +465,12 @@ def fastest_distance_effort(activity: Activity, target_distance_m: float) -> dic
         best: tuple[float, float] | None = None
         for segment_start in sorted(candidate_starts):
             segment_end = segment_start + target_distance_m
-            started = _time_at_distance(timeline, segment_start, latest_exact=True)
-            ended = _time_at_distance(timeline, segment_end, latest_exact=False)
+            started = _time_at_distance(
+                timeline, segment_start, latest_exact=True, distances=distances
+            )
+            ended = _time_at_distance(
+                timeline, segment_end, latest_exact=False, distances=distances
+            )
             if started is None or ended is None or ended <= started:
                 continue
             duration = ended - started
