@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
+import json
 from typing import Any
 
 from openai import OpenAI
@@ -522,11 +523,20 @@ def comparison_summary(
             model=settings.openai_model,
             instructions=(
                 "Du bist ein deutschsprachiger Radsport-Coach. Vergleiche die ausgewählten Fahrten in 4 bis 6 "
-                "prägnanten Sätzen. Berücksichtige Tempo, Herzfrequenzeffizienz, Höhenmeter, Wind und dokumentierte "
-                "Trinkmengen, ohne daraus einen individuellen Flüssigkeitsbedarf abzuleiten. Benenne "
-                "klar, welche Einheit in welchem Aspekt überzeugt, ohne medizinische Aussagen oder erfundene Werte."
+                "prägnanten Sätzen. Verwende ausschließlich die gelieferten Zahlen und rechne Einheiten korrekt um. "
+                "Bei der Herzfrequenzeffizienz gilt: höheres km/h je bpm ist besser. Bei der Geschwindigkeit gilt: "
+                "höheres km/h ist schneller. Prüfe jede Rangfolge vor dem Schreiben und nenne niemals gleichzeitig "
+                "zwei verschiedene Gewinner für dasselbe Kriterium. Wenn Werte nahe beieinanderliegen, formuliere "
+                "vorsichtig. Berücksichtige Tempo, Herzfrequenzeffizienz, Höhenmeter, Wind und dokumentierte "
+                "Trinkmengen, ohne daraus einen individuellen Flüssigkeitsbedarf abzuleiten. Benenne klar, welche "
+                "Einheit in welchem Aspekt überzeugt, ohne medizinische Aussagen oder erfundene Werte."
             ),
-            input=f"Gesamtmetriken: {metrics}\nNormalisierte Streckenverläufe: {profiles or []}",
+            input=(
+                "Gesamtmetriken als JSON:\n"
+                f"{json.dumps(metrics, ensure_ascii=False, indent=2)}\n"
+                "Normalisierte Streckenverläufe als JSON:\n"
+                f"{json.dumps(profiles or [], ensure_ascii=False)}"
+            ),
             max_output_tokens=500,
             store=False,
         )

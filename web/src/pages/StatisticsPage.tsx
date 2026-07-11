@@ -24,7 +24,7 @@ import { statisticsApi, type StatisticsGranularity } from '../api'
 import { MetricCard } from '../components/MetricCard'
 import { PageHeader } from '../components/PageHeader'
 import { EmptyState, ErrorState } from '../components/States'
-import { formatDistance, formatDuration, formatElevation, formatHeartRate, formatSpeedMps } from '../utils/format'
+import { formatChartValue, formatDistance, formatDuration, formatElevation, formatHeartRate, formatSpeedMps } from '../utils/format'
 
 type PresetId = 'last_week' | 'four_weeks' | 'last_month' | 'last_quarter' | 'year' | 'custom'
 
@@ -133,11 +133,11 @@ export function StatisticsPage() {
   const series = (data?.series ?? []).map((point) => ({
     ...point,
     label: chartLabel(point.period_start, data?.granularity ?? 'day'),
-    distanceKm: point.distance_m / 1000,
-    durationHours: point.duration_s / 3600,
-    movingHours: point.moving_time_s / 3600,
-    pauseHours: Math.max(0, point.duration_s - point.moving_time_s) / 3600,
-    speedKmh: point.avg_speed_mps == null ? null : point.avg_speed_mps * 3.6,
+    distanceKm: Number((point.distance_m / 1000).toFixed(1)),
+    durationHours: Number((point.duration_s / 3600).toFixed(2)),
+    movingHours: Number((point.moving_time_s / 3600).toFixed(2)),
+    pauseHours: Number((Math.max(0, point.duration_s - point.moving_time_s) / 3600).toFixed(2)),
+    speedKmh: point.avg_speed_mps == null ? null : Number((point.avg_speed_mps * 3.6).toFixed(1)),
   }))
   const tooltipStyle = { borderRadius: 14, border: `1px solid ${theme.palette.divider}`, boxShadow: '0 12px 30px rgba(20,50,45,.08)' }
   const comparisonHint = comparison ? `gegen ${displayDate(comparison.date_from)} – ${displayDate(comparison.date_to)}` : 'im gewählten Zeitraum'
@@ -195,9 +195,9 @@ export function StatisticsPage() {
                   <ComposedChart data={series} margin={{ top: 10, right: 8, left: -12, bottom: 0 }}>
                     <CartesianGrid vertical={false} strokeDasharray="4 4" stroke={theme.palette.divider} />
                     <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                    <YAxis yAxisId="distance" unit=" km" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
+                    <YAxis yAxisId="distance" width={48} axisLine={false} tickLine={false} tick={{ fontSize: 11 }} label={{ value: 'km', angle: -90, position: 'insideLeft', fontSize: 11 }} />
                     <YAxis yAxisId="count" orientation="right" allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                    <Tooltip contentStyle={tooltipStyle} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatChartValue(value)} />
                     <Legend />
                     <Bar yAxisId="distance" dataKey="distanceKm" name="Distanz (km)" fill={theme.palette.chart.teal} radius={[6, 6, 0, 0]} />
                     <Line yAxisId="count" type="monotone" dataKey="activity_count" name="Fahrten" stroke={theme.palette.chart.coral} strokeWidth={3} dot={{ r: 3 }} connectNulls />
@@ -210,9 +210,9 @@ export function StatisticsPage() {
                   <ComposedChart data={series} margin={{ top: 10, right: 8, left: -12, bottom: 0 }}>
                     <CartesianGrid vertical={false} strokeDasharray="4 4" stroke={theme.palette.divider} />
                     <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                    <YAxis yAxisId="time" unit=" h" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                    <YAxis yAxisId="elevation" orientation="right" unit=" m" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                    <Tooltip contentStyle={tooltipStyle} />
+                    <YAxis yAxisId="time" width={48} axisLine={false} tickLine={false} tick={{ fontSize: 11 }} label={{ value: 'Std.', angle: -90, position: 'insideLeft', fontSize: 11 }} />
+                    <YAxis yAxisId="elevation" orientation="right" width={48} axisLine={false} tickLine={false} tick={{ fontSize: 11 }} label={{ value: 'm', angle: 90, position: 'insideRight', fontSize: 11 }} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatChartValue(value, 2)} />
                     <Legend />
                     <Bar yAxisId="time" stackId="time" dataKey="movingHours" name="Bewegung (Std.)" fill={theme.palette.chart.blue} radius={[0, 0, 0, 0]} />
                     <Bar yAxisId="time" stackId="time" dataKey="pauseHours" name="Pausen (Std.)" fill={theme.palette.chart.amber} radius={[6, 6, 0, 0]} />
@@ -226,9 +226,9 @@ export function StatisticsPage() {
                   <ComposedChart data={series} margin={{ top: 10, right: 8, left: -12, bottom: 0 }}>
                     <CartesianGrid vertical={false} strokeDasharray="4 4" stroke={theme.palette.divider} />
                     <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                    <YAxis yAxisId="speed" unit=" km/h" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                    <YAxis yAxisId="heart" orientation="right" unit=" bpm" domain={['auto', 'auto']} axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                    <Tooltip contentStyle={tooltipStyle} />
+                    <YAxis yAxisId="speed" width={48} axisLine={false} tickLine={false} tick={{ fontSize: 11 }} label={{ value: 'km/h', angle: -90, position: 'insideLeft', fontSize: 11 }} />
+                    <YAxis yAxisId="heart" orientation="right" width={48} domain={['auto', 'auto']} axisLine={false} tickLine={false} tick={{ fontSize: 11 }} label={{ value: 'bpm', angle: 90, position: 'insideRight', fontSize: 11 }} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatChartValue(value, 1)} />
                     <Legend />
                     <Line yAxisId="speed" type="monotone" dataKey="speedKmh" name="Ø Geschwindigkeit" stroke={theme.palette.chart.teal} strokeWidth={3} dot={{ r: 3 }} connectNulls />
                     <Line yAxisId="heart" type="monotone" dataKey="avg_hr_bpm" name="Ø Herzfrequenz" stroke={theme.palette.chart.coral} strokeWidth={3} dot={{ r: 3 }} connectNulls />

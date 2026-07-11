@@ -16,7 +16,7 @@ import { AIDataBasisPanel } from '../components/AIDataBasisPanel'
 import { MetricCard } from '../components/MetricCard'
 import { PageHeader } from '../components/PageHeader'
 import { EmptyState, ErrorState } from '../components/States'
-import { formatDistance, formatDuration, formatHydration, formatSpeedMps } from '../utils/format'
+import { formatChartValue, formatDistance, formatDuration, formatHydration, formatSpeedMps } from '../utils/format'
 
 const currentYear = new Date().getFullYear()
 const seasons = [
@@ -70,8 +70,8 @@ export function DevelopmentPage() {
   const monthly = (insights.data?.monthly ?? []).map((point) => ({
     ...point,
     label: monthLabel(point.period_start),
-    distanceKm: point.distance_m / 1000,
-    speedKmh: point.avg_speed_mps == null ? null : point.avg_speed_mps * 3.6,
+    distanceKm: Number((point.distance_m / 1000).toFixed(1)),
+    speedKmh: point.avg_speed_mps == null ? null : Number((point.avg_speed_mps * 3.6).toFixed(1)),
   }))
   const current = insights.data?.current
   const hasActivities = (numberValue(current, 'activity_count') ?? 0) > 0
@@ -121,9 +121,9 @@ export function DevelopmentPage() {
                     <ComposedChart data={monthly} margin={{ top: 10, right: 5, left: -12, bottom: 0 }}>
                       <CartesianGrid vertical={false} strokeDasharray="4 4" stroke={theme.palette.divider} />
                       <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                      <YAxis yAxisId="distance" unit=" km" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                      <YAxis yAxisId="speed" orientation="right" unit=" km/h" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                      <Tooltip contentStyle={tooltipStyle} />
+                      <YAxis yAxisId="distance" width={48} axisLine={false} tickLine={false} tick={{ fontSize: 11 }} label={{ value: 'km', angle: -90, position: 'insideLeft', fontSize: 11 }} />
+                      <YAxis yAxisId="speed" orientation="right" width={48} axisLine={false} tickLine={false} tick={{ fontSize: 11 }} label={{ value: 'km/h', angle: 90, position: 'insideRight', fontSize: 11 }} />
+                      <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatChartValue(value, 1)} />
                       <Legend />
                       <Bar yAxisId="distance" dataKey="distanceKm" name="Distanz (km)" fill={theme.palette.chart.blue} radius={[6, 6, 0, 0]} />
                       <Line yAxisId="speed" type="monotone" dataKey="speedKmh" name="Ø Geschwindigkeit" stroke={theme.palette.chart.teal} strokeWidth={3} dot={false} connectNulls />

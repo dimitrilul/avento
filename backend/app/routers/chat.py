@@ -194,6 +194,13 @@ def _local_midnight(value: date) -> datetime:
     return datetime.combine(value, time.min, tzinfo=ZoneInfo(timezone_name)).astimezone(timezone.utc)
 
 
+def _activity_local_date(activity: Activity, timezone_name: str) -> date:
+    started_at = activity.started_at
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=timezone.utc)
+    return started_at.astimezone(ZoneInfo(timezone_name)).date()
+
+
 def _execute_tool(
     name: str,
     arguments: dict[str, Any],
@@ -339,7 +346,12 @@ def _execute_tool(
     return {"error": "Unbekanntes Werkzeug."}
 
 
-def _local_answer(payload: ChatRequest, db: Session, user: User) -> tuple[str, list[Activity], list[str]]:
+def _local_answer(
+    payload: ChatRequest,
+    db: Session,
+    user: User,
+    timezone_name: str = "UTC",
+) -> tuple[str, list[Activity], list[str]]:
     activities = db.scalars(
         select(Activity).where(Activity.user_id == user.id).order_by(Activity.started_at.desc())
     ).all()
@@ -387,6 +399,42 @@ def _local_answer(payload: ChatRequest, db: Session, user: User) -> tuple[str, l
                 ["search_activities", "compare_activities"],
             )
     if "fitness" in message or "entwick" in message or "ausdauer" in message:
+        today = datetime.now(ZoneInfo(timezone_name)).date()
+        period_days = 90 if ("monat" in message and ("3" in message or "drei" in message)) else None
+        if period_days:
+            current_from = today - timedelta(days=period_days - 1)
+            previous_from = current_from - timedelta(days=period_days)
+            current = [activity for activity in activities if current_from <= _activity_local_date(activity, timezone_name) <= today]
+            previous = [activity for activity in activities if previous_from <= _activity_local_date(activity, timezone_name) < current_from]
+            current_totals = totals(current)
+            previous_totals = totals(previous)
+            chronological = sorted(current + previous, key=lambda activity: activity.started_at)
+            if current and current_totals["avg_speed_mps"] is not None:
+                recent_speed = float(current_totals["avg_speed_mps"]) * 3.6
+                comparison = ""
+                if previous and previous_totals["avg_speed_mps"] is not None:
+                    earlier_speed = float(previous_totals["avg_speed_mps"]) * 3.6
+                    comparison = (
+                        f" Gegenüber den vorherigen drei Monaten ({previous_from:%d.%m.%Y}–"
+                        f"{(current_from - timedelta(days=1)):%d.%m.%Y}) ist das eine Veränderung von "
+                        f"{recent_speed - earlier_speed:+.1f} km/h."
+                    )
+                else:
+                    comparison = " Für die vorherigen drei Monate liegen keine vergleichbaren Aktivitäten vor."
+                return (
+                    f"In den letzten drei Monaten ({current_from:%d.%m.%Y}–{today:%d.%m.%Y}) absolviertest du "
+                    f"{len(current)} Fahrten mit durchschnittlich {recent_speed:.1f} km/h."
+                    f"{comparison} Die Aussage basiert auf "
+                    "aggregierten Fahrtdaten; unterschiedliche Strecken und Bedingungen können den Vergleich beeinflussen.",
+                    chronological,
+                    ["search_activities", "get_training_statistics"],
+                )
+            if not current:
+                return (
+                    f"In den letzten drei Monaten ({current_from:%d.%m.%Y}–{today:%d.%m.%Y}) wurden keine Aktivitäten gefunden.",
+                    previous,
+                    ["search_activities", "get_training_statistics"],
+                )
         chronological = list(reversed(activities[:10]))
         midpoint = max(1, len(chronological) // 2)
         earlier, recent = chronological[:midpoint], chronological[midpoint:]
@@ -421,7 +469,7 @@ def chat(
 ) -> ChatResponse:
     settings = get_settings()
     if not settings.openai_api_key:
-        answer, activities, tools_used = _local_answer(payload, db, current_user)
+        answer, activities, tools_used = _local_answer(payload, db, current_user, settings.timezone)
         source_activities = list({activity.id: activity for activity in activities}.values())[:10]
         local_trace = [
             {"name": name, "arguments": {}, "activity_ids": [activity.id for activity in source_activities]}
@@ -560,7 +608,7 @@ def chat(
             ),
         )
     except Exception:
-        answer, activities, local_tools = _local_answer(payload, db, current_user)
+        answer, activities, local_tools = _local_answer(payload, db, current_user, settings.timezone)
         source_activities = list({activity.id: activity for activity in activities}.values())[:10]
         combined_tools = list(dict.fromkeys([*tools_used, *local_tools]))
         local_trace = [

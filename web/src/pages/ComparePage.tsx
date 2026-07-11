@@ -44,7 +44,7 @@ import { activitiesApi, type Activity, type ActivityComparisonMetric } from '../
 import { ActivityCard } from '../components/ActivityCard'
 import { EmptyState, ErrorState } from '../components/States'
 import { PageHeader } from '../components/PageHeader'
-import { errorMessage, formatDistance, formatDuration, formatElevation, formatHeartRate, formatSpeedMps } from '../utils/format'
+import { errorMessage, formatChartValue, formatDistance, formatDuration, formatElevation, formatHeartRate, formatSpeedMps } from '../utils/format'
 
 type ProfileMetric = 'elevation_m' | 'speed_kmh' | 'heart_rate_bpm'
 
@@ -188,8 +188,8 @@ export function ComparePage() {
                     <LineChart data={profileData} margin={{ top: 20, right: 12, left: -8, bottom: 0 }}>
                       <CartesianGrid vertical={false} strokeDasharray="4 4" stroke={theme.palette.divider} />
                       <XAxis type="number" dataKey="progress" domain={[0, 100]} unit=" %" axisLine={false} tickLine={false} />
-                      <YAxis unit={` ${profileMetricConfig[profileMetric].unit}`} domain={profileMetric === 'elevation_m' ? ['auto', 'auto'] : ['auto', 'auto']} axisLine={false} tickLine={false} />
-                      <Tooltip contentStyle={tooltipStyle} labelFormatter={(value) => `${Number(value).toLocaleString('de-DE', { maximumFractionDigits: 1 })} % der Strecke`} />
+                      <YAxis width={58} domain={profileMetric === 'elevation_m' ? ['auto', 'auto'] : ['auto', 'auto']} axisLine={false} tickLine={false} tickFormatter={(value) => formatChartValue(value, 1)} label={{ value: profileMetricConfig[profileMetric].unit, angle: -90, position: 'insideLeft', fontSize: 11 }} />
+                      <Tooltip contentStyle={tooltipStyle} labelFormatter={(value) => `${Number(value).toLocaleString('de-DE', { maximumFractionDigits: 1 })} % der Strecke`} formatter={(value) => formatChartValue(value, profileMetric === 'heart_rate_bpm' ? 0 : 1)} />
                       <Legend />
                       {profiles.map((profile, index) => <Line key={profile.activity_id} type="monotone" dataKey={`activity_${index}`} name={profile.title} stroke={colors[index % colors.length]} strokeWidth={2.5} dot={false} connectNulls />)}
                     </LineChart>
@@ -206,9 +206,9 @@ export function ComparePage() {
                   <ComposedChart data={windData} margin={{ top: 10, right: 8, left: -10, bottom: 16 }}>
                     <CartesianGrid vertical={false} strokeDasharray="4 4" stroke={theme.palette.divider} />
                     <XAxis dataKey="shortTitle" interval={0} angle={-15} textAnchor="end" height={58} tick={{ fontSize: 10 }} />
-                    <YAxis yAxisId="wind" unit=" km/h" axisLine={false} tickLine={false} />
-                    <YAxis yAxisId="efficiency" orientation="right" domain={['auto', 'auto']} axisLine={false} tickLine={false} />
-                    <Tooltip contentStyle={tooltipStyle} />
+                    <YAxis yAxisId="wind" width={52} axisLine={false} tickLine={false} tickFormatter={(value) => formatChartValue(value, 1)} label={{ value: 'km/h', angle: -90, position: 'insideLeft', fontSize: 11 }} />
+                    <YAxis yAxisId="efficiency" orientation="right" width={58} domain={['auto', 'auto']} axisLine={false} tickLine={false} tickFormatter={(value) => formatChartValue(value, 3)} label={{ value: 'km/h je bpm', angle: 90, position: 'insideRight', fontSize: 11 }} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(value, name) => [formatChartValue(value, name === 'Effizienz' ? 3 : 1), name]} />
                     <Legend />
                     <ReferenceLine yAxisId="wind" y={0} stroke={theme.palette.divider} />
                     <Bar yAxisId="wind" dataKey="headwind_kmh" name="Gegenwind" fill={theme.palette.chart.blue} radius={[5, 5, 0, 0]} />

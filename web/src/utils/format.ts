@@ -52,6 +52,11 @@ export const formatDate = (value?: string | null) => (value ? date.format(new Da
 export const formatDateTime = (value?: string | null) =>
   value ? dateTime.format(new Date(value)) : '–'
 
+export const formatChartValue = (value: unknown, maximumFractionDigits = 1) => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '–'
+  return value.toLocaleString('de-DE', { maximumFractionDigits })
+}
+
 export const activityTypeLabels: Record<string, string> = {
   ride: 'Radfahrt',
   training: 'Training',
