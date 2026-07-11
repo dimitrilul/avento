@@ -42,6 +42,8 @@ describe('OverlayExportDialog', () => {
     expect(screen.getAllByText('Feierabendrunde')).toHaveLength(1)
     fireEvent.click(screen.getByText('Glass'))
     expect(screen.getByText('Transparenter Hintergrund')).toBeInTheDocument()
+    expect(screen.getByTestId('overlay-canvas')).toHaveStyle({ background: 'transparent' })
+    expect(screen.getByTestId('overlay-canvas').querySelector('[style*="backdrop-filter"]')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Titel'))
     expect(screen.queryByText('Feierabendrunde')).not.toBeInTheDocument()

@@ -131,7 +131,19 @@ export function OverlayExportDialog({ open, onClose, activity, points }: { open:
               onClick={() => selectPreset(item)}
               sx={{ border: '2px solid', borderColor: preset.id === item.id ? 'primary.main' : 'divider', borderRadius: 2.5, p: .75, bgcolor: 'background.paper', color: 'text.primary', textAlign: 'left', cursor: 'pointer', position: 'relative' }}
             >
-              <Box sx={{ height: 54, borderRadius: 1.5, background: item.background, backgroundColor: item.transparent ? '#7D8885' : undefined, position: 'relative', overflow: 'hidden' }}>
+              <Box sx={{
+                height: 54,
+                borderRadius: 1.5,
+                background: item.background,
+                backgroundColor: item.transparent ? '#DDE3E1' : undefined,
+                backgroundImage: item.transparent
+                  ? 'linear-gradient(45deg, #C7CFCC 25%, transparent 25%), linear-gradient(-45deg, #C7CFCC 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #C7CFCC 75%), linear-gradient(-45deg, transparent 75%, #C7CFCC 75%)'
+                  : undefined,
+                backgroundSize: item.transparent ? '12px 12px' : undefined,
+                backgroundPosition: item.transparent ? '0 0, 0 6px, 6px -6px, -6px 0px' : undefined,
+                position: 'relative',
+                overflow: 'hidden',
+              }}>
                 {item.showRoute && <Box component="svg" viewBox="0 0 100 50" sx={{ width: '100%', height: '100%' }}><path d="M12 40 C 25 7, 42 43, 58 15 S 82 34, 91 9" fill="none" stroke={item.accent} strokeWidth="4" strokeLinecap="round" /></Box>}
               </Box>
               <Typography fontSize={12} fontWeight={800} mt={.6}>{item.name}</Typography>
@@ -191,9 +203,8 @@ export function OverlayExportDialog({ open, onClose, activity, points }: { open:
 const OverlayCanvas = forwardRef<HTMLDivElement, { activity: Activity; points: TrackPoint[]; preset: OverlayPreset; metrics: MetricKey[]; showRoute: boolean; showTitle: boolean; showDate: boolean; showBrand: boolean }>(function OverlayCanvas({ activity, points, preset, metrics, showRoute, showTitle, showDate, showBrand }, ref) {
   const visibleMetrics = metrics.map((key) => metricValue(key, activity))
   return (
-    <Box ref={ref} sx={{ width: 540, height: 540, position: 'relative', overflow: 'hidden', p: preset.compact ? 4 : 4.5, color: preset.foreground, background: preset.background, fontFamily: 'Manrope Variable, sans-serif' }}>
+    <Box data-testid="overlay-canvas" ref={ref} sx={{ width: 540, height: 540, position: 'relative', overflow: 'hidden', p: preset.compact ? 4 : 4.5, color: preset.foreground, background: preset.background, fontFamily: 'Manrope Variable, sans-serif' }}>
       {!preset.transparent && <><Box sx={{ position: 'absolute', width: 290, height: 290, borderRadius: '50%', border: `48px solid ${preset.muted}`, opacity: .1, right: -140, bottom: -115 }} /><Box sx={{ position: 'absolute', width: 130, height: 130, borderRadius: '50%', bgcolor: preset.accent, opacity: .1, left: -55, top: 90 }} /></>}
-      {preset.transparent && <Box sx={{ position: 'absolute', inset: 18, bgcolor: 'rgba(9,24,27,.52)', border: '1px solid rgba(255,255,255,.32)', borderRadius: preset.compact ? 4 : 7, backdropFilter: 'blur(14px)' }} />}
       <Stack sx={{ height: '100%', position: 'relative', zIndex: 1 }}>
         <Stack direction="row" justifyContent="space-between" alignItems="center" minHeight={30}>
           {showBrand ? <Typography fontWeight={900} fontSize={23} letterSpacing="-.06em">avento</Typography> : <span />}
