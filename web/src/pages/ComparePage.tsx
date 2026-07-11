@@ -43,6 +43,7 @@ import {
 import { activitiesApi, type Activity, type ActivityComparisonMetric } from '../api'
 import { ActivityCard } from '../components/ActivityCard'
 import { EmptyState, ErrorState } from '../components/States'
+import { MarkdownText } from '../components/MarkdownText'
 import { PageHeader } from '../components/PageHeader'
 import { errorMessage, formatChartValue, formatDistance, formatDuration, formatElevation, formatHeartRate, formatSpeedMps } from '../utils/format'
 
@@ -162,7 +163,7 @@ export function ComparePage() {
                 {compare.data?.ai_provider && <Chip size="small" variant="outlined" label={compare.data.ai_provider} sx={{ alignSelf: 'flex-start' }} />}
               </Stack>
               <Divider sx={{ my: 2 }} />
-              <Typography sx={{ lineHeight: 1.75, whiteSpace: 'pre-wrap' }}>{compare.data?.ai_summary || 'Die Fahrten wurden datenbasiert gegenübergestellt. Für eine KI-Einordnung muss ein KI-Anbieter konfiguriert sein.'}</Typography>
+              <MarkdownText content={compare.data?.ai_summary || 'Die Fahrten wurden datenbasiert gegenübergestellt. Für eine KI-Einordnung muss ein KI-Anbieter konfiguriert sein.'} />
             </CardContent>
           </Card>
 

@@ -10,6 +10,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { activitiesApi, chatApi, type AIDataBasis, type ChatHistoryItem, type ChatSource } from '../api'
 import { useAuth } from '../auth/AuthContext'
 import { AIDataBasisPanel } from '../components/AIDataBasisPanel'
+import { MarkdownText } from '../components/MarkdownText'
 import { PageHeader } from '../components/PageHeader'
 import { errorMessage, formatDate } from '../utils/format'
 
@@ -197,7 +198,7 @@ function ChatBubble({ message, profileName, avatar }: { message: ChatUiMessage; 
       </Avatar>
       <Box sx={{ maxWidth: { xs: 'calc(100% - 52px)', sm: '80%' } }}>
         <Box sx={{ px: 2, py: 1.5, bgcolor: user ? 'primary.main' : 'background.paper', color: user ? 'primary.contrastText' : 'text.primary', borderRadius: user ? '18px 4px 18px 18px' : '4px 18px 18px 18px', border: user ? 'none' : '1px solid', borderColor: 'divider', boxShadow: user ? 'none' : '0 8px 24px rgba(20,50,45,.05)' }}>
-          <ChatText content={message.content} />
+          <MarkdownText content={message.content} />
         </Box>
         {!user && message.provider && (
           <Box sx={{ mt: 1.1 }}>
@@ -214,30 +215,4 @@ function ChatBubble({ message, profileName, avatar }: { message: ChatUiMessage; 
       </Box>
     </Stack>
   )
-}
-
-function ChatText({ content }: { content: string }) {
-  return (
-    <Stack spacing={.75}>
-      {content.split(/\r?\n/).map((line, index) => {
-        const trimmed = line.trim()
-        if (!trimmed) return <Box key={index} sx={{ height: .35 }} />
-        const isListItem = /^[-*]\s+/.test(trimmed) || /^\d+[.)]\s+/.test(trimmed)
-        const text = trimmed.replace(/^[-*]\s+/, '').replace(/^\d+[.)]\s+/, '')
-        return (
-          <Box key={index} component={isListItem ? 'li' : 'div'} sx={isListItem ? { ml: 2, pl: .5 } : undefined}>
-            <Typography component="span" sx={{ lineHeight: 1.7 }}>{renderInlineMarkdown(text)}</Typography>
-          </Box>
-        )
-      })}
-    </Stack>
-  )
-}
-
-function renderInlineMarkdown(value: string) {
-  return value.split(/(\*\*[^*]+\*\*)/g).map((part, index) => (
-    part.startsWith('**') && part.endsWith('**')
-      ? <Box component="strong" key={index} sx={{ fontWeight: 800 }}>{part.slice(2, -2)}</Box>
-      : <span key={index}>{part}</span>
-  ))
 }

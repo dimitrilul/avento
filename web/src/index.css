@@ -6,6 +6,17 @@
   text-rendering: optimizeLegibility;
 }
 
+/* Recharts otherwise uses a white browser-default tooltip, which is unreadable in dark mode. */
+.recharts-default-tooltip {
+  background-color: var(--mui-palette-background-paper) !important;
+  color: var(--mui-palette-text-primary) !important;
+  border-color: var(--mui-palette-divider) !important;
+}
+
+.recharts-tooltip-label {
+  color: var(--mui-palette-text-primary) !important;
+}
+
 * { box-sizing: border-box; }
 html, body, #root { min-height: 100%; margin: 0; }
 body { min-width: 320px; }

@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { activitiesApi, type AIDataBasis } from '../api'
 import { errorMessage, formatDateTime } from '../utils/format'
 import { AIDataBasisPanel } from './AIDataBasisPanel'
+import { MarkdownText } from './MarkdownText'
 
 export function AiSummaryCard({ activityId, fallback, provider, dataBasis }: { activityId: string; fallback?: string | null; provider?: string | null; dataBasis?: AIDataBasis | null }) {
   const client = useQueryClient()
@@ -29,7 +30,7 @@ export function AiSummaryCard({ activityId, fallback, provider, dataBasis }: { a
         <Divider sx={{ my: 2 }} />
         {query.isLoading && !fallback ? <Skeleton variant="rounded" height={130} /> : summary ? (
           <>
-            <Typography sx={{ lineHeight: 1.75, whiteSpace: 'pre-wrap' }}>{summary}</Typography>
+            <MarkdownText content={summary} />
             <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 2 }}>
               <Typography variant="caption" color="text.secondary">{query.data?.updated_at ? `Erstellt ${formatDateTime(query.data.updated_at)}` : 'Automatisch aus deinen Fahrtdaten erstellt'}</Typography>
               <Button size="small" startIcon={<RefreshRoundedIcon />} onClick={() => generate.mutate(true)} disabled={generate.isPending}>Neu erstellen</Button>

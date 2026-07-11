@@ -13,6 +13,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { insightsApi, type InsightPattern } from '../api'
 import { AIDataBasisPanel } from '../components/AIDataBasisPanel'
+import { MarkdownText } from '../components/MarkdownText'
 import { MetricCard } from '../components/MetricCard'
 import { PageHeader } from '../components/PageHeader'
 import { EmptyState, ErrorState } from '../components/States'
@@ -176,7 +177,7 @@ export function DevelopmentPage() {
             <Stack spacing={2}>
               <Box sx={{ p: { xs: 2, sm: 2.5 }, borderRadius: 3.5, bgcolor: 'action.hover' }}>
                 <Stack direction="row" gap={1} alignItems="center" sx={{ mb: 1 }}><CalendarMonthRoundedIcon color="primary" /><Typography fontWeight={800}>{seasons.find((item) => item.value === season)?.label} {review.data.year}</Typography><Chip size="small" variant="outlined" label={review.data.provider} /></Stack>
-                <Typography sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.75 }}>{review.data.summary}</Typography>
+                <MarkdownText content={review.data.summary} />
               </Box>
               <AIDataBasisPanel dataBasis={review.data.data_basis} provider={review.data.provider} title="Datengrundlage des Rückblicks" />
             </Stack>
