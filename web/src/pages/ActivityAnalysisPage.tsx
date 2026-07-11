@@ -66,7 +66,7 @@ export function ActivityAnalysisPage() {
         </Stack>
       </Stack>
 
-      <AdvancedActivityAnalysis points={track.data.points} />
+      <AdvancedActivityAnalysis points={track.data.points} weather={item.weather} />
     </>
   )
 }

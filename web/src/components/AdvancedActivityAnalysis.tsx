@@ -7,6 +7,7 @@ import RouteRoundedIcon from '@mui/icons-material/RouteRounded'
 import SpeedRoundedIcon from '@mui/icons-material/SpeedRounded'
 import SwapHorizRoundedIcon from '@mui/icons-material/SwapHorizRounded'
 import TerrainRoundedIcon from '@mui/icons-material/TerrainRounded'
+import ThermostatRoundedIcon from '@mui/icons-material/ThermostatRounded'
 import ZoomOutMapRoundedIcon from '@mui/icons-material/ZoomOutMapRounded'
 import {
   Box,
@@ -37,13 +38,21 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import type { TrackPoint } from '../api'
+import type { TrackPoint, WeatherData } from '../api'
 import { formatDistance, formatElevation, formatHeartRate, formatSpeed } from '../utils/format'
 import { EmptyState } from './States'
 import { TrackMap } from './TrackMap'
 
 type XAxisMode = 'distance' | 'time'
 type SeriesKey = 'elevation' | 'speed' | 'heartRate'
+
+type RouteWeatherPoint = {
+  pointIndex: number
+  distanceKm: number
+  elapsedSeconds: number
+  temperatureC: number
+  apparentTemperatureC: number | null
+}
 
 export type AnalysisPoint = {
   index: number
@@ -139,6 +148,32 @@ export function buildAnalysisPoints(points: TrackPoint[]): AnalysisPoint[] {
       speedKmh,
       heartRateBpm: isFiniteNumber(point.heart_rate_bpm) ? point.heart_rate_bpm : null,
     }
+  })
+}
+
+function buildRouteWeatherPoints(
+  weather: WeatherData | null | undefined,
+  trackPoints: TrackPoint[],
+  analysisPoints: AnalysisPoint[],
+): RouteWeatherPoint[] {
+  if (!Array.isArray(weather?.route_weather_samples)) return []
+  return weather.route_weather_samples.flatMap((raw) => {
+    if (!raw || typeof raw !== 'object') return []
+    const sample = raw as Record<string, unknown>
+    const pointIndex = isFiniteNumber(sample.point_index) ? Math.round(sample.point_index) : -1
+    const temperatureC = sample.temperature_c
+    if (pointIndex < 0 || pointIndex >= trackPoints.length || !isFiniteNumber(temperatureC)) return []
+    const point = analysisPoints[pointIndex]
+    if (!point) return []
+    return [{
+      pointIndex,
+      distanceKm: point.distanceKm,
+      elapsedSeconds: point.elapsedSeconds,
+      temperatureC,
+      apparentTemperatureC: isFiniteNumber(sample.apparent_temperature_c)
+        ? sample.apparent_temperature_c
+        : null,
+    }]
   })
 }
 
@@ -388,6 +423,73 @@ function AnalysisChart({ data, mode, series, color, selection, kilometerMarks, a
   )
 }
 
+function WeatherRouteChart({ data, mode }: { data: RouteWeatherPoint[]; mode: XAxisMode }) {
+  const theme = useTheme()
+  const xKey: keyof RouteWeatherPoint = mode === 'distance' ? 'distanceKm' : 'elapsedSeconds'
+  const temperatures = data.map((point) => point.temperatureC)
+  const start = data[0].temperatureC
+  const end = data.at(-1)!.temperatureC
+  const minimum = Math.min(...temperatures)
+  const maximum = Math.max(...temperatures)
+  const change = end - start
+  const formatTemperature = (value: number) => `${value.toLocaleString('de-DE', { maximumFractionDigits: 1 })} °C`
+
+  return (
+    <Card>
+      <CardContent sx={{ p: { xs: 1.5, sm: 2.5 } }}>
+        <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" gap={1.5} sx={{ mb: 1 }}>
+          <Box>
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <ThermostatRoundedIcon sx={{ color: 'chart.amber' }} />
+              <Typography variant="h3">Temperaturverlauf</Typography>
+              <Typography variant="body2" color="text.secondary">(°C)</Typography>
+            </Stack>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: .4 }}>
+              Wetter zum jeweiligen Ort und Zeitpunkt entlang der Tour
+            </Typography>
+          </Box>
+          <Stack direction="row" gap={.75} flexWrap="wrap">
+            <Chip size="small" label={`Start ${formatTemperature(start)}`} />
+            <Chip size="small" label={`Min. ${formatTemperature(minimum)}`} />
+            <Chip size="small" label={`Max. ${formatTemperature(maximum)}`} />
+            <Chip size="small" color={Math.abs(change) >= 3 ? 'warning' : 'default'} label={`Ende ${formatTemperature(end)} (${change >= 0 ? '+' : ''}${change.toLocaleString('de-DE', { maximumFractionDigits: 1 })}°)`} />
+          </Stack>
+        </Stack>
+        <ResponsiveContainer width="100%" height={230}>
+          <ComposedChart data={data} margin={{ top: 12, right: 18, left: -10, bottom: 4 }}>
+            <CartesianGrid strokeDasharray="4 4" vertical={false} stroke={theme.palette.divider} />
+            <XAxis
+              dataKey={xKey}
+              type="number"
+              domain={['dataMin', 'dataMax']}
+              tickCount={7}
+              tickFormatter={(value) => formatAxisValue(Number(value), mode)}
+              axisLine={false}
+              tickLine={false}
+              minTickGap={24}
+              tick={{ fontSize: 11 }}
+            />
+            <YAxis domain={['auto', 'auto']} unit=" °C" width={62} axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
+            <ChartTooltip content={({ active, payload }) => {
+              const point = payload?.[0]?.payload as RouteWeatherPoint | undefined
+              if (!active || !point) return null
+              return (
+                <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 2, boxShadow: 4, p: 1.25 }}>
+                  <Typography variant="caption" color="text.secondary">{formatAxisValue(point[xKey] as number, mode)}</Typography>
+                  <Typography variant="body2" fontWeight={750} sx={{ color: 'chart.amber' }}>{formatTemperature(point.temperatureC)}</Typography>
+                  {point.apparentTemperatureC != null && <Typography variant="caption" color="text.secondary">Gefühlt {formatTemperature(point.apparentTemperatureC)}</Typography>}
+                </Box>
+              )
+            }} />
+            <Area type="monotone" dataKey="temperatureC" stroke={theme.palette.chart.amber} strokeWidth={2.5} fill={alpha(theme.palette.chart.amber, .2)} dot={{ r: 4 }} activeDot={{ r: 6 }} isAnimationActive={false} />
+          </ComposedChart>
+        </ResponsiveContainer>
+        <Typography variant="caption" color="text.secondary">{data.length} Wetterstützpunkte; Werte zwischen den Punkten werden nur zur Orientierung verbunden.</Typography>
+      </CardContent>
+    </Card>
+  )
+}
+
 function dataPoint(index: number, visiblePoints: AnalysisPoint[]) {
   if (!visiblePoints.length) return undefined
   if (index <= visiblePoints[0].index) return visiblePoints[0]
@@ -440,10 +542,11 @@ function SectionMetric({ label, value, icon }: { label: string; value: string; i
   )
 }
 
-export function AdvancedActivityAnalysis({ points }: { points: TrackPoint[] }) {
+export function AdvancedActivityAnalysis({ points, weather }: { points: TrackPoint[]; weather?: WeatherData | null }) {
   const theme = useTheme()
   const analysisPoints = useMemo(() => buildAnalysisPoints(points), [points])
   const chartPoints = useMemo(() => sampleForCharts(analysisPoints), [analysisPoints])
+  const routeWeather = useMemo(() => buildRouteWeatherPoints(weather, points, analysisPoints), [weather, points, analysisPoints])
   const [axisMode, setAxisMode] = useState<XAxisMode>('distance')
   const [visibleSeries, setVisibleSeries] = useState<SeriesKey[]>(['elevation', 'speed', 'heartRate'])
   const [zoomRange, setZoomRange] = useState<[number, number]>([0, Math.max(0, chartPoints.length - 1)])
@@ -552,6 +655,10 @@ export function AdvancedActivityAnalysis({ points }: { points: TrackPoint[] }) {
           onHover={setActiveIndex}
         />
       ))}
+
+      {routeWeather.length > 1 && (
+        <WeatherRouteChart data={routeWeather} mode={axisMode} />
+      )}
 
       <Card>
         <CardContent sx={{ p: { xs: 2, md: 2.5 } }}>
