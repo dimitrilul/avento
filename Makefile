@@ -1,4 +1,4 @@
-.PHONY: up deploy down logs test backup
+.PHONY: up deploy down logs test backup restore
 
 up:
 	docker compose up --build -d
@@ -21,3 +21,7 @@ test:
 
 backup:
 	./scripts/backup.sh
+
+restore:
+	@test -n "$(BACKUP_DB)" || (echo "Verwendung: make restore BACKUP_DB=... BACKUP_UPLOADS=..." >&2; exit 2)
+	./scripts/restore.sh "$(BACKUP_DB)" "$(BACKUP_UPLOADS)"

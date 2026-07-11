@@ -128,3 +128,13 @@ Uploads und PostgreSQL-Daten liegen in Docker-Volumes. `scripts/backup.sh`
 sichert Datenbank, originale TCX-Dateien und Aktivitätsfotos im lokalen Verzeichnis `backups/`.
 API-Schlüssel, Passwörter und Token gehören ausschließlich in `.env` und niemals
 ins Repository.
+
+Ein vollständiges Restore wird mit beiden Backup-Dateien gestartet. Dabei werden
+die aktuelle Datenbank und das Upload-Volume überschrieben:
+
+```bash
+make restore BACKUP_DB=backups/avento-<zeitstempel>.dump \
+  BACKUP_UPLOADS=backups/avento-uploads-<zeitstempel>.tar.gz
+```
+
+Das Restore-Skript verlangt vor dem Überschreiben die Eingabe `RESTORE`.
