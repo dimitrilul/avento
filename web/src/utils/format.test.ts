@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatDistance, formatDuration, formatHydration, formatSpeedMps } from './format'
+import { formatClockDuration, formatDistance, formatDuration, formatHydration, formatSpeedMps } from './format'
 
 describe('deutsche Werteformatierung', () => {
   it('formatiert Meter als Kilometer', () => {
@@ -8,6 +8,11 @@ describe('deutsche Werteformatierung', () => {
 
   it('formatiert Sekunden als verständliche Fahrzeit', () => {
     expect(formatDuration(7_560)).toBe('2 Std. 06 Min.')
+  })
+
+  it('formatiert Zeit für Diagramme als Stunden, Minuten und Sekunden', () => {
+    expect(formatClockDuration(17_679)).toBe('04:54:39')
+    expect(formatClockDuration(17_679, false)).toBe('04:54')
   })
 
   it('wandelt Meter pro Sekunde in Kilometer pro Stunde um', () => {

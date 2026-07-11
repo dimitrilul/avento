@@ -24,7 +24,7 @@ import { statisticsApi, type StatisticsGranularity } from '../api'
 import { MetricCard } from '../components/MetricCard'
 import { PageHeader } from '../components/PageHeader'
 import { EmptyState, ErrorState } from '../components/States'
-import { formatChartValue, formatDistance, formatDuration, formatElevation, formatHeartRate, formatSpeedMps } from '../utils/format'
+import { formatChartValue, formatClockDuration, formatDistance, formatDuration, formatElevation, formatHeartRate, formatSpeedMps } from '../utils/format'
 
 type PresetId = 'last_week' | 'four_weeks' | 'last_month' | 'last_quarter' | 'year' | 'custom'
 
@@ -134,9 +134,9 @@ export function StatisticsPage() {
     ...point,
     label: chartLabel(point.period_start, data?.granularity ?? 'day'),
     distanceKm: Number((point.distance_m / 1000).toFixed(1)),
-    durationHours: Number((point.duration_s / 3600).toFixed(2)),
-    movingHours: Number((point.moving_time_s / 3600).toFixed(2)),
-    pauseHours: Number((Math.max(0, point.duration_s - point.moving_time_s) / 3600).toFixed(2)),
+    durationSeconds: point.duration_s,
+    movingSeconds: point.moving_time_s,
+    pauseSeconds: Math.max(0, point.duration_s - point.moving_time_s),
     speedKmh: point.avg_speed_mps == null ? null : Number((point.avg_speed_mps * 3.6).toFixed(1)),
   }))
   const tooltipStyle = { borderRadius: 14, border: `1px solid ${theme.palette.divider}`, boxShadow: '0 12px 30px rgba(20,50,45,.08)' }
@@ -210,12 +210,17 @@ export function StatisticsPage() {
                   <ComposedChart data={series} margin={{ top: 10, right: 8, left: -12, bottom: 0 }}>
                     <CartesianGrid vertical={false} strokeDasharray="4 4" stroke={theme.palette.divider} />
                     <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                    <YAxis yAxisId="time" width={48} axisLine={false} tickLine={false} tick={{ fontSize: 11 }} label={{ value: 'Std.', angle: -90, position: 'insideLeft', fontSize: 11 }} />
+                    <YAxis yAxisId="time" width={62} axisLine={false} tickLine={false} tickFormatter={(value) => formatClockDuration(Number(value), false)} tick={{ fontSize: 11 }} label={{ value: 'Zeit', angle: -90, position: 'insideLeft', fontSize: 11 }} />
                     <YAxis yAxisId="elevation" orientation="right" width={48} axisLine={false} tickLine={false} tick={{ fontSize: 11 }} label={{ value: 'm', angle: 90, position: 'insideRight', fontSize: 11 }} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatChartValue(value, 2)} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(value, name) => [
+                      typeof name === 'string' && (name.startsWith('Bewegung') || name.startsWith('Pausen'))
+                        ? formatClockDuration(Number(value))
+                        : formatChartValue(value, 1),
+                      name,
+                    ]} />
                     <Legend />
-                    <Bar yAxisId="time" stackId="time" dataKey="movingHours" name="Bewegung (Std.)" fill={theme.palette.chart.blue} radius={[0, 0, 0, 0]} />
-                    <Bar yAxisId="time" stackId="time" dataKey="pauseHours" name="Pausen (Std.)" fill={theme.palette.chart.amber} radius={[6, 6, 0, 0]} />
+                    <Bar yAxisId="time" stackId="time" dataKey="movingSeconds" name="Bewegung (Zeit)" fill={theme.palette.chart.blue} radius={[0, 0, 0, 0]} />
+                    <Bar yAxisId="time" stackId="time" dataKey="pauseSeconds" name="Pausen (Zeit)" fill={theme.palette.chart.amber} radius={[6, 6, 0, 0]} />
                     <Line yAxisId="elevation" type="monotone" dataKey="elevation_gain_m" name="Höhenmeter" stroke={theme.palette.chart.lime} strokeWidth={3} dot={false} connectNulls />
                   </ComposedChart>
                 </ResponsiveContainer>

@@ -39,7 +39,7 @@ import {
   YAxis,
 } from 'recharts'
 import type { TrackPoint, WeatherData } from '../api'
-import { formatDistance, formatElevation, formatHeartRate, formatSpeed } from '../utils/format'
+import { formatClockDuration, formatDistance, formatElevation, formatHeartRate, formatSpeed } from '../utils/format'
 import { EmptyState } from './States'
 import { TrackMap } from './TrackMap'
 
@@ -255,16 +255,7 @@ function sampleForCharts(points: AnalysisPoint[], maximum = 1_800) {
 }
 
 function formatElapsed(seconds: number, compact = false) {
-  const total = Math.max(0, Math.round(seconds))
-  const hours = Math.floor(total / 3600)
-  const minutes = Math.floor(total % 3600 / 60)
-  const remainder = total % 60
-  if (compact) return hours
-    ? `${hours}:${String(minutes).padStart(2, '0')}`
-    : `${minutes}:${String(remainder).padStart(2, '0')}`
-  return hours
-    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')} Std.`
-    : `${minutes}:${String(remainder).padStart(2, '0')} Min.`
+  return formatClockDuration(seconds, !compact)
 }
 
 function formatAxisValue(value: number, mode: XAxisMode) {

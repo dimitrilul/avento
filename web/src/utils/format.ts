@@ -48,6 +48,17 @@ export const formatDuration = (seconds?: number | null) => {
   return hours ? `${hours} Std. ${minutes.toString().padStart(2, '0')} Min.` : `${minutes} Min.`
 }
 
+/** Formats a duration for charts and compact time displays as HH:MM(:SS). */
+export const formatClockDuration = (seconds?: number | null, includeSeconds = true) => {
+  if (seconds == null || !Number.isFinite(seconds)) return '–'
+  const total = Math.max(0, Math.round(seconds))
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const remainder = total % 60
+  const base = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+  return includeSeconds ? `${base}:${String(remainder).padStart(2, '0')}` : base
+}
+
 export const formatDate = (value?: string | null) => (value ? date.format(new Date(value)) : '–')
 export const formatDateTime = (value?: string | null) =>
   value ? dateTime.format(new Date(value)) : '–'
