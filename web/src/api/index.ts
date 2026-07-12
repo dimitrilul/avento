@@ -18,6 +18,7 @@ import type {
   TokenResponse,
   LoginResponse,
   PasskeyOptionsResponse,
+  PasskeySummary,
   TrackResponse,
   WeatherResponse,
   SummaryResponse,
@@ -46,6 +47,14 @@ export const authApi = {
   login2fa: (challengeToken: string, code: string) => apiRequest<TokenResponse>('/auth/login/2fa', { method: 'POST', auth: false, body: { challenge_token: challengeToken, code } }).then((tokens) => { tokenStore.set(tokens); return tokens }),
   passkeyOptions: (email: string) => apiRequest<PasskeyOptionsResponse>(`/auth/passkeys/login/options?email=${encodeURIComponent(email)}`, { method: 'POST', auth: false }),
   passkeyLogin: (credential: unknown, challengeToken: string) => apiRequest<TokenResponse>('/auth/passkeys/login', { method: 'POST', auth: false, body: { credential, challenge_token: challengeToken } }).then((tokens) => { tokenStore.set(tokens); return tokens }),
+  totpStatus: () => apiRequest<{ enabled: boolean }>('/auth/totp'),
+  totpSetup: () => apiRequest<{ secret: string; otpauth_uri: string }>('/auth/totp/setup', { method: 'POST' }),
+  totpEnable: (code: string) => apiRequest<void>('/auth/totp/enable', { method: 'POST', body: { code } }),
+  totpDisable: () => apiRequest<void>('/auth/totp', { method: 'DELETE' }),
+  passkeyRegistrationOptions: () => apiRequest<PasskeyOptionsResponse>('/auth/passkeys/options', { method: 'POST' }),
+  registerPasskey: (credential: unknown, challengeToken: string, name: string) => apiRequest<{ id: string; name: string }>('/auth/passkeys', { method: 'POST', body: { credential, challenge_token: challengeToken, name } }),
+  passkeys: () => apiRequest<PasskeySummary[]>('/auth/passkeys'),
+  deletePasskey: (id: string) => apiRequest<void>(`/auth/passkeys/${id}`, { method: 'DELETE' }),
   async register(data: RegistrationData) {
     const tokens = await apiRequest<TokenResponse>('/auth/register', {
       method: 'POST',

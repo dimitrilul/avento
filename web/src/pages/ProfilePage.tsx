@@ -89,6 +89,7 @@ export function ProfilePage() {
       </Stack></CardContent></Card>
       <Stack spacing={2.5}>
         <Card><CardContent><Typography variant="h3">Konto</Typography><Typography color="text.secondary" sx={{ my: 2 }}>Du bist als {profile?.email} angemeldet.</Typography><Button color="error" variant="outlined" startIcon={<LogoutRoundedIcon />} onClick={() => void signOut()}>Abmelden</Button></CardContent></Card>
+        <SecurityCard />
         <ChangePasswordCard />
         {profile?.is_admin && <><InviteCard /><AdminPasswordResetCard /></>}
         <Card><CardContent><Typography variant="h3">Datenschutz</Typography><Typography color="text.secondary" sx={{ mt: 1, lineHeight: 1.7 }}>Deine Fahrten werden zentral in deiner privaten Avento-Installation gespeichert. Andere Konten können deine Aktivitäten nicht sehen.</Typography></CardContent></Card>
@@ -96,6 +97,39 @@ export function ProfilePage() {
     </Box>
     <AvatarCropDialog open={Boolean(avatarFile)} file={avatarFile} busy={uploadAvatar.isPending} onClose={() => setAvatarFile(null)} onConfirm={(file) => uploadAvatar.mutate(file)} />
   </>
+}
+
+function SecurityCard() {
+  const [totpEnabled, setTotpEnabled] = useState(false)
+  const [setup, setSetup] = useState<{ secret: string; otpauth_uri: string } | null>(null)
+  const [code, setCode] = useState('')
+  const [name, setName] = useState('Mein Passkey')
+  const [passkeys, setPasskeys] = useState<{ id: string; name: string; created_at: string }[]>([])
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => { void Promise.all([authApi.totpStatus(), authApi.passkeys()]).then(([status, keys]) => { setTotpEnabled(status.enabled); setPasskeys(keys) }).catch((e) => setError(errorMessage(e))) }, [])
+  const setupTotp = async () => { try { setError(null); setSetup(await authApi.totpSetup()) } catch (e) { setError(errorMessage(e)) } }
+  const enableTotp = async () => { try { setError(null); await authApi.totpEnable(code); setTotpEnabled(true); setSetup(null); setCode('') } catch (e) { setError(errorMessage(e)) } }
+  const disableTotp = async () => { try { await authApi.totpDisable(); setTotpEnabled(false) } catch (e) { setError(errorMessage(e)) } }
+  const registerPasskey = async () => {
+    try {
+      if (!window.PublicKeyCredential) throw new Error('Passkeys werden von diesem Browser nicht unterstützt.')
+      const data = await authApi.passkeyRegistrationOptions()
+      const options = data.options as PublicKeyCredentialCreationOptions
+      const fromBase64 = (value: string) => Uint8Array.from(atob(value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - value.length % 4) % 4)), (c) => c.charCodeAt(0)).buffer
+      options.challenge = fromBase64(options.challenge as unknown as string); options.user.id = fromBase64(options.user.id as unknown as string)
+      const credential = await navigator.credentials.create({ publicKey: options }); if (!credential) throw new Error('Kein Passkey erstellt.')
+      const toBase64 = (value: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(value))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+      const created = credential as PublicKeyCredential; const response = created.response as AuthenticatorAttestationResponse
+      const saved = await authApi.registerPasskey({ id: created.id, rawId: toBase64(created.rawId), type: created.type, response: { clientDataJSON: toBase64(response.clientDataJSON), attestationObject: toBase64(response.attestationObject) } }, data.challenge_token, name.trim() || 'Passkey')
+      setPasskeys((current) => [...current, { ...saved, created_at: new Date().toISOString() }])
+    } catch (e) { setError(errorMessage(e)) }
+  }
+  return <Card><CardContent><Typography variant="h3">Anmeldesicherheit</Typography><Typography color="text.secondary" sx={{ my: 1.5 }}>Schütze dein Konto zusätzlich mit einem Authenticator-Code oder einem Passkey.</Typography><Stack spacing={1.5}>
+    {error && <Alert severity="error">{error}</Alert>}
+    <Typography variant="subtitle1">TOTP-Authenticator</Typography>
+    {totpEnabled ? <Button color="error" variant="outlined" onClick={() => void disableTotp()}>TOTP deaktivieren</Button> : setup ? <><Typography variant="body2">Scanne den folgenden Link in deiner Authenticator-App oder kopiere das Geheimnis: <strong>{setup.secret}</strong></Typography><Button component="a" href={setup.otpauth_uri}>Authenticator öffnen</Button><TextField label="6-stelliger Code" value={code} inputMode="numeric" onChange={(e) => setCode(e.target.value)} /><Button variant="contained" disabled={!/^\d{6}$/.test(code)} onClick={() => void enableTotp()}>TOTP aktivieren</Button></> : <Button variant="outlined" onClick={() => void setupTotp()}>TOTP einrichten</Button>}
+    <Divider /><Typography variant="subtitle1">Passkeys</Typography>{passkeys.map((key) => <Stack key={key.id} direction="row" justifyContent="space-between" alignItems="center"><Typography variant="body2">{key.name}</Typography><Button size="small" color="error" onClick={() => void authApi.deletePasskey(key.id).then(() => setPasskeys((current) => current.filter((item) => item.id !== key.id)))}>Löschen</Button></Stack>)}<TextField label="Name für neuen Passkey" value={name} onChange={(e) => setName(e.target.value)} /><Button variant="outlined" onClick={() => void registerPasskey()}>Passkey hinzufügen</Button>
+  </Stack></CardContent></Card>
 }
 
 function InviteCard() {

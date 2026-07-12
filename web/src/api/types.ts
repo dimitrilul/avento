@@ -38,6 +38,8 @@ export interface PasskeyOptionsResponse {
   challenge_token: string
 }
 
+export interface PasskeySummary { id: string; name: string; created_at: string }
+
 export interface AuthCredentials {
   email: string
   password: string

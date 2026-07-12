@@ -174,6 +174,11 @@ def totp_disable(current_user: User = Depends(get_current_user), db: Session = D
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.get("/totp")
+def totp_status(current_user: User = Depends(get_current_user)) -> dict[str, bool]:
+    return {"enabled": current_user.totp_enabled}
+
+
 @router.post("/passkeys/options")
 def passkey_registration_options(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, object]:
     return registration_options(request, current_user, db)
@@ -184,6 +189,21 @@ async def passkey_register(request: Request, current_user: User = Depends(get_cu
     body = await request.json()
     credential = register_credential(request, current_user, body["credential"], str(body["challenge_token"]), str(body.get("name", "Passkey")), db)
     return {"id": credential.id, "name": credential.name}
+
+
+@router.get("/passkeys")
+def passkey_list(current_user: User = Depends(get_current_user)) -> list[dict[str, object]]:
+    return [{"id": item.id, "name": item.name, "created_at": item.created_at.isoformat()} for item in current_user.passkeys]
+
+
+@router.delete("/passkeys/{credential_id}", status_code=status.HTTP_204_NO_CONTENT)
+def passkey_delete(credential_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> Response:
+    credential = next((item for item in current_user.passkeys if item.id == credential_id), None)
+    if credential is None:
+        raise HTTPException(status_code=404, detail="Passkey nicht gefunden.")
+    db.delete(credential)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/passkeys/login/options")
