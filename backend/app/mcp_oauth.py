@@ -21,7 +21,7 @@ from .mcp_models import (
     McpOAuthRefreshToken,
 )
 from .models import User, utcnow
-from .security import generate_opaque_token, token_hash, verify_password
+from .security import decrypt_factor_secret, generate_opaque_token, token_hash, verify_password, verify_totp
 
 
 class OAuthRequestError(Exception):
@@ -304,9 +304,11 @@ def refresh_oauth_token(
     )
 
 
-def user_from_password(db: Session, email: str, password: str) -> User | None:
+def user_from_password(db: Session, email: str, password: str, totp_code: str | None = None) -> User | None:
     user = db.scalar(select(User).where(User.email == email.strip().lower()))
     if user is None or not verify_password(password, user.password_hash):
+        return None
+    if user.totp_enabled and not verify_totp(decrypt_factor_secret(user.totp_secret_encrypted), totp_code or ""):
         return None
     return user
 
@@ -326,6 +328,25 @@ def authorization_form(
     hidden = "".join(_hidden_input(name, value) for name, value in params.items())
     scope_list = "".join(f"<li>{html.escape(scope)}</li>" for scope in scopes)
     error_html = f'<p class="error">{html.escape(error)}</p>' if error else ""
+    passkey_script = """<script>
+const b64 = s => Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-s.length%4)%4)), c => c.charCodeAt(0)).buffer;
+const out = b => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,'');
+document.getElementById('passkey').addEventListener('click', async () => {
+  const form = document.querySelector('form'); const values = Object.fromEntries(new FormData(form));
+  try {
+    const start = await fetch('/oauth/authorize/passkey/options', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email:values.email})});
+    if (!start.ok) throw new Error('Passkey-Optionen konnten nicht geladen werden.');
+    const data = await start.json(); const o = data.options; o.challenge = b64(o.challenge);
+    o.allowCredentials = (o.allowCredentials || []).map(c => ({...c, id:b64(c.id)}));
+    const c = await navigator.credentials.get({publicKey:o}); if (!c) throw new Error('Keine Passkey-Anmeldung erhalten.');
+    const r = c.response;
+    const credential = {id:c.id, rawId:out(c.rawId), type:c.type, response:{clientDataJSON:out(r.clientDataJSON), authenticatorData:out(r.authenticatorData), signature:out(r.signature), userHandle:r.userHandle ? out(r.userHandle) : null}};
+    const finish = await fetch('/oauth/authorize/passkey', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({...values, credential, challenge_token:data.challenge_token})});
+    if (!finish.ok) throw new Error('Passkey konnte nicht bestätigt werden.');
+    location.href = (await finish.json()).redirect_uri;
+  } catch (e) { alert(e.message || 'Passkey-Anmeldung fehlgeschlagen.'); }
+});
+</script>"""
     return f"""<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Avento-Zugriff freigeben</title>
@@ -334,5 +355,6 @@ def authorization_form(
 <ul>{scope_list}</ul>{error_html}<form method="post" action="{html.escape(action, quote=True)}">{hidden}
 <label for="email">E-Mail-Adresse</label><input id="email" name="email" type="email" autocomplete="email" required>
 <label for="password">Passwort</label><input id="password" name="password" type="password" autocomplete="current-password" required>
-<button name="decision" value="allow" type="submit">Zugriff erlauben</button><button class="deny" name="decision" value="deny" type="submit">Ablehnen</button>
-</form><p><small>Die Verbindung verwendet OAuth 2.1 mit PKCE. Avento speichert kein MCP-Client-Secret.</small></p></main></body></html>"""
+<label for="totp_code">Authenticator-Code <small>(falls aktiviert)</small></label><input id="totp_code" name="totp_code" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code">
+<button name="decision" value="allow" type="submit">Zugriff erlauben</button><button id="passkey" type="button">Mit Passkey freigeben</button><button class="deny" name="decision" value="deny" type="submit">Ablehnen</button>
+</form><p><small>Die Verbindung verwendet OAuth 2.1 mit PKCE. Avento speichert kein MCP-Client-Secret.</small></p>{passkey_script}</main></body></html>"""

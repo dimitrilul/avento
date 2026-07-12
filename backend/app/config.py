@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     mcp_access_token_minutes: int = Field(default=10, ge=1, le=15)
     mcp_allowed_origins: str = "http://localhost,http://127.0.0.1,http://[::1]"
     public_url: str | None = None
+    webauthn_rp_name: str = "Avento"
+    webauthn_rp_id: str | None = None
     mcp_resource_uri: str | None = None
     mcp_oauth_access_token_minutes: int = Field(default=15, ge=1, le=60)
     mcp_oauth_refresh_token_days: int = Field(default=30, ge=1, le=365)

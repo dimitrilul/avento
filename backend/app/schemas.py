@@ -28,6 +28,7 @@ class RegisterRequest(AccountCreate):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=256)
+    totp_code: str | None = Field(default=None, pattern=r"^\d{6}$")
 
 
 class RefreshRequest(BaseModel):
@@ -39,6 +40,25 @@ class TokenResponse(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     expires_in: int
+
+
+class LoginChallengeResponse(BaseModel):
+    requires_2fa: bool = True
+    challenge_token: str
+
+
+class Login2FARequest(BaseModel):
+    challenge_token: str = Field(min_length=20, max_length=2048)
+    code: str = Field(pattern=r"^\d{6}$")
+
+
+class TotpSetupResponse(BaseModel):
+    secret: str
+    otpauth_uri: str
+
+
+class PasskeyNameRequest(BaseModel):
+    name: str = Field(default="Passkey", min_length=1, max_length=120)
 
 
 class HeartRateZone(BaseModel):

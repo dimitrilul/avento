@@ -37,6 +37,8 @@ class User(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4_str)
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(512))
+    totp_secret_encrypted: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     display_name: Mapped[str] = mapped_column(String(120))
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     hr_max: Mapped[int] = mapped_column(Integer, default=190)
@@ -47,6 +49,10 @@ class User(Base):
     avatar_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    passkeys: Mapped[list["PasskeyCredential"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
     activities: Mapped[list["Activity"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     activity_photos: Mapped[list["ActivityPhoto"]] = relationship(
@@ -85,6 +91,22 @@ class Invitation(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class PasskeyCredential(Base):
+    __tablename__ = "passkey_credentials"
+    __table_args__ = (UniqueConstraint("credential_id", name="uq_passkey_credential_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4_str)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    credential_id: Mapped[str] = mapped_column(String(512), nullable=False)
+    public_key: Mapped[bytes] = mapped_column(nullable=False)
+    sign_count: Mapped[int] = mapped_column(Integer, default=0)
+    name: Mapped[str] = mapped_column(String(120), default="Passkey")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    user: Mapped[User] = relationship(back_populates="passkeys")
 
 
 class RefreshToken(Base):

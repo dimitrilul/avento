@@ -1,13 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
-import { authApi, profileApi, type BootstrapData, type Profile, type RegistrationData } from '../api'
+import { authApi, profileApi, type BootstrapData, type LoginResponse, type Profile, type RegistrationData } from '../api'
 import { tokenStore } from '../api/client'
 import { LoadingScreen } from '../components/States'
 
 interface AuthContextValue {
   profile: Profile | null
   loading: boolean
-  login: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string, totpCode?: string) => Promise<LoginResponse>
   register: (data: RegistrationData) => Promise<void>
   bootstrap: (data: BootstrapData) => Promise<void>
   logout: () => Promise<void>
@@ -48,9 +48,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refreshProfile])
 
   const login = useCallback(
-    async (email: string, password: string) => {
-      await authApi.login(email, password)
-      await refreshProfile()
+    async (email: string, password: string, totpCode?: string) => {
+      const result = await authApi.login(email, password, totpCode)
+      if ('access_token' in result) await refreshProfile()
+      return result
     },
     [refreshProfile],
   )

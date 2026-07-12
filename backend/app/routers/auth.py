@@ -3,7 +3,8 @@ from __future__ import annotations
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -23,9 +24,15 @@ from ..schemas import (
     RefreshRequest,
     RegisterRequest,
     TokenResponse,
+    Login2FARequest, LoginChallengeResponse, PasskeyNameRequest, TotpSetupResponse,
 )
 from ..mcp_security import revoke_oauth_user_tokens
-from ..security import create_access_token, generate_opaque_token, hash_password, token_hash, verify_password
+from ..security import (
+    create_access_token, create_factor_challenge, decrypt_factor_secret, encrypt_factor_secret,
+    generate_opaque_token, generate_totp_secret, hash_password, token_hash, totp_uri, verify_password, verify_totp,
+)
+from ..passkeys import authenticate_credential, authentication_options, register_credential, registration_options
+from jwt import InvalidTokenError
 from ..tcx import default_hr_zones
 
 
@@ -112,11 +119,85 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> TokenRe
     return _issue_tokens(db, user)
 
 
-@router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
+@router.post("/login", response_model=TokenResponse | LoginChallengeResponse)
+def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse | LoginChallengeResponse:
     user = db.scalar(select(User).where(func.lower(User.email) == str(payload.email).lower()))
     if user is None or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="E-Mail-Adresse oder Passwort ist falsch.")
+    if user.totp_enabled:
+        if not payload.totp_code or not verify_totp(decrypt_factor_secret(user.totp_secret_encrypted), payload.totp_code):
+            if payload.totp_code:
+                raise HTTPException(status_code=401, detail="Der Authenticator-Code ist ungültig.")
+            return LoginChallengeResponse(challenge_token=create_factor_challenge(user_id=user.id, challenge=b"totp", purpose="totp-login"))
+    return _issue_tokens(db, user)
+
+
+@router.post("/login/2fa", response_model=TokenResponse)
+def login_2fa(payload: Login2FARequest, db: Session = Depends(get_db)) -> TokenResponse:
+    from ..security import decode_factor_challenge
+    try:
+        user_id, challenge = decode_factor_challenge(payload.challenge_token, purpose="totp-login")
+    except InvalidTokenError as exc:
+        raise HTTPException(status_code=401, detail="Die 2FA-Anmeldung ist abgelaufen.") from exc
+    if challenge != b"totp":
+        raise HTTPException(status_code=401, detail="Die 2FA-Anmeldung ist ungültig.")
+    user = db.get(User, user_id)
+    if user is None or not verify_totp(decrypt_factor_secret(user.totp_secret_encrypted), payload.code):
+        raise HTTPException(status_code=401, detail="Der Authenticator-Code ist ungültig.")
+    return _issue_tokens(db, user)
+
+
+@router.post("/totp/setup", response_model=TotpSetupResponse)
+def totp_setup(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> TotpSetupResponse:
+    secret = generate_totp_secret()
+    current_user.totp_secret_encrypted = encrypt_factor_secret(secret)
+    current_user.totp_enabled = False
+    db.commit()
+    return TotpSetupResponse(secret=secret, otpauth_uri=totp_uri(secret, current_user.email))
+
+
+@router.post("/totp/enable", status_code=status.HTTP_204_NO_CONTENT)
+def totp_enable(code: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> Response:
+    secret = decrypt_factor_secret(current_user.totp_secret_encrypted)
+    if not verify_totp(secret, code):
+        raise HTTPException(status_code=400, detail="Der Authenticator-Code ist ungültig.")
+    current_user.totp_enabled = True
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/totp", status_code=status.HTTP_204_NO_CONTENT)
+def totp_disable(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> Response:
+    current_user.totp_enabled = False
+    current_user.totp_secret_encrypted = None
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/passkeys/options")
+def passkey_registration_options(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, object]:
+    return registration_options(request, current_user, db)
+
+
+@router.post("/passkeys", status_code=status.HTTP_201_CREATED)
+async def passkey_register(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, str]:
+    body = await request.json()
+    credential = register_credential(request, current_user, body["credential"], str(body["challenge_token"]), str(body.get("name", "Passkey")), db)
+    return {"id": credential.id, "name": credential.name}
+
+
+@router.post("/passkeys/login/options")
+def passkey_login_options(email: str, request: Request, db: Session = Depends(get_db)) -> dict[str, object]:
+    user = db.scalar(select(User).where(func.lower(User.email) == email.strip().lower()))
+    if user is None:
+        raise HTTPException(status_code=404, detail="Nutzerkonto nicht gefunden.")
+    return authentication_options(request, user)
+
+
+@router.post("/passkeys/login", response_model=TokenResponse)
+async def passkey_login(request: Request, db: Session = Depends(get_db)) -> TokenResponse:
+    body = await request.json()
+    user = authenticate_credential(request, body["credential"], str(body["challenge_token"]), db)
     return _issue_tokens(db, user)
 
 

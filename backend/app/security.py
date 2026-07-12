@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import base64
+import hmac
+import struct
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -8,6 +11,7 @@ from typing import Any
 import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
+from cryptography.fernet import Fernet, InvalidToken
 
 from .config import get_settings
 
@@ -54,3 +58,60 @@ def generate_opaque_token() -> str:
 def token_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
+
+def _factor_cipher() -> Fernet:
+    key = base64.urlsafe_b64encode(hashlib.sha256(get_settings().secret_key.encode()).digest())
+    return Fernet(key)
+
+
+def encrypt_factor_secret(value: str) -> str:
+    return _factor_cipher().encrypt(value.encode()).decode()
+
+
+def decrypt_factor_secret(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        return _factor_cipher().decrypt(value.encode()).decode()
+    except (InvalidToken, UnicodeDecodeError):
+        return None
+
+
+def generate_totp_secret() -> str:
+    return base64.b32encode(secrets.token_bytes(20)).decode().rstrip("=")
+
+
+def verify_totp(secret: str | None, code: str, *, at: int | None = None) -> bool:
+    if not secret or not code or not code.isdigit() or len(code) != 6:
+        return False
+    counter = int((at or int(datetime.now(timezone.utc).timestamp())) // 30)
+    key = base64.b32decode(secret + "=" * (-len(secret) % 8), casefold=True)
+    for offset in (-1, 0, 1):
+        digest = hmac.new(key, struct.pack(">Q", counter + offset), hashlib.sha1).digest()
+        start = digest[-1] & 0x0F
+        value = (struct.unpack(">I", digest[start:start + 4])[0] & 0x7FFFFFFF) % 1_000_000
+        if hmac.compare_digest(f"{value:06d}", code):
+            return True
+    return False
+
+
+def totp_uri(secret: str, email: str) -> str:
+    issuer = get_settings().webauthn_rp_name
+    from urllib.parse import quote
+    return f"otpauth://totp/{quote(issuer)}:{quote(email)}?secret={secret}&issuer={quote(issuer)}&digits=6&period=30"
+
+
+def create_factor_challenge(*, user_id: str, challenge: bytes, purpose: str) -> str:
+    now = datetime.now(timezone.utc)
+    return jwt.encode(
+        {"sub": user_id, "type": "factor", "purpose": purpose, "challenge": base64.urlsafe_b64encode(challenge).decode(),
+         "iat": now, "exp": now + timedelta(minutes=2)},
+        get_settings().secret_key, algorithm="HS256"
+    )
+
+
+def decode_factor_challenge(token: str, *, purpose: str) -> tuple[str, bytes]:
+    payload = jwt.decode(token, get_settings().secret_key, algorithms=["HS256"])
+    if payload.get("type") != "factor" or payload.get("purpose") != purpose or not payload.get("sub"):
+        raise jwt.InvalidTokenError("Ungültige Sicherheits-Challenge")
+    return str(payload["sub"]), base64.urlsafe_b64decode(payload["challenge"])

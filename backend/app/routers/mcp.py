@@ -67,6 +67,7 @@ from ..mcp_service import (
     tools_for_scopes,
 )
 from ..models import User
+from ..passkeys import authenticate_credential, authentication_options
 
 
 router = APIRouter(tags=["MCP"])
@@ -282,7 +283,9 @@ async def _authorize_request(
         if params.get("state"):
             redirect_params["state"] = params["state"]
         return _redirect_with_params(params["redirect_uri"], redirect_params)
-    user = user_from_password(db, str(form.get("email", "")), str(form.get("password", "")))
+    user = user_from_password(
+        db, str(form.get("email", "")), str(form.get("password", "")), str(form.get("totp_code", ""))
+    )
     if user is None:
         return HTMLResponse(
             authorization_form(
@@ -318,6 +321,32 @@ async def oauth_authorize_get(request: Request, db: Session = Depends(get_db)) -
 async def oauth_authorize_post(request: Request, db: Session = Depends(get_db)) -> Response:
     form = await request.form()
     return await _authorize_request(request, db, form)
+
+
+@router.post("/oauth/authorize/passkey/options", include_in_schema=False)
+async def oauth_passkey_options(request: Request, db: Session = Depends(get_db)) -> JSONResponse:
+    body = await request.json()
+    user = db.scalar(select(User).where(User.email == str(body.get("email", "")).strip().lower()))
+    if user is None:
+        raise HTTPException(status_code=404, detail="Nutzerkonto nicht gefunden.")
+    return JSONResponse(authentication_options(request, user), headers=NO_STORE_HEADERS)
+
+
+@router.post("/oauth/authorize/passkey", include_in_schema=False)
+async def oauth_passkey_authorize(request: Request, db: Session = Depends(get_db)) -> JSONResponse:
+    body = await request.json()
+    values = {key: str(body[key]) for key in ("response_type", "client_id", "redirect_uri", "scope", "code_challenge", "code_challenge_method", "resource") if body.get(key) is not None}
+    client, scopes, resource = validate_authorization_request(
+        db, response_type=values.get("response_type"), client_id=values.get("client_id"),
+        redirect_uri=values.get("redirect_uri"), scope=values.get("scope"), code_challenge=values.get("code_challenge"),
+        code_challenge_method=values.get("code_challenge_method"), resource=values.get("resource"), expected_resource=_mcp_resource_uri(request),
+    )
+    user = authenticate_credential(request, body["credential"], str(body["challenge_token"]), db)
+    code = create_authorization_code(db, client=client, user=user, redirect_uri=values["redirect_uri"], code_challenge=values["code_challenge"], scopes=scopes, resource=resource)
+    params = {"code": code}
+    if body.get("state"):
+        params["state"] = str(body["state"])
+    return JSONResponse({"redirect_uri": _redirect_with_params(values["redirect_uri"], params).headers["location"]}, headers=NO_STORE_HEADERS)
 
 
 @router.post("/oauth/token", include_in_schema=False)

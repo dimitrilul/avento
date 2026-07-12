@@ -26,6 +26,18 @@ export interface TokenResponse {
   expires_in: number
 }
 
+export interface LoginChallengeResponse {
+  requires_2fa: true
+  challenge_token: string
+}
+
+export type LoginResponse = TokenResponse | LoginChallengeResponse
+
+export interface PasskeyOptionsResponse {
+  options: PublicKeyCredentialCreationOptions | PublicKeyCredentialRequestOptions
+  challenge_token: string
+}
+
 export interface AuthCredentials {
   email: string
   password: string

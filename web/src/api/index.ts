@@ -16,6 +16,8 @@ import type {
   RegistrationData,
   StatisticsOverview,
   TokenResponse,
+  LoginResponse,
+  PasskeyOptionsResponse,
   TrackResponse,
   WeatherResponse,
   SummaryResponse,
@@ -32,15 +34,18 @@ function queryString(values: Record<string, string | number | undefined>) {
 }
 
 export const authApi = {
-  async login(email: string, password: string) {
-    const tokens = await apiRequest<TokenResponse>('/auth/login', {
+  async login(email: string, password: string, totpCode?: string) {
+    const result = await apiRequest<LoginResponse>('/auth/login', {
       method: 'POST',
       auth: false,
-      body: { email, password },
+      body: { email, password, ...(totpCode ? { totp_code: totpCode } : {}) },
     })
-    tokenStore.set(tokens)
-    return tokens
+    if ('access_token' in result) tokenStore.set(result)
+    return result
   },
+  login2fa: (challengeToken: string, code: string) => apiRequest<TokenResponse>('/auth/login/2fa', { method: 'POST', auth: false, body: { challenge_token: challengeToken, code } }).then((tokens) => { tokenStore.set(tokens); return tokens }),
+  passkeyOptions: (email: string) => apiRequest<PasskeyOptionsResponse>(`/auth/passkeys/login/options?email=${encodeURIComponent(email)}`, { method: 'POST', auth: false }),
+  passkeyLogin: (credential: unknown, challengeToken: string) => apiRequest<TokenResponse>('/auth/passkeys/login', { method: 'POST', auth: false, body: { credential, challenge_token: challengeToken } }).then((tokens) => { tokenStore.set(tokens); return tokens }),
   async register(data: RegistrationData) {
     const tokens = await apiRequest<TokenResponse>('/auth/register', {
       method: 'POST',
