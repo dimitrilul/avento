@@ -30,6 +30,7 @@ export function LoginPage() {
         setChallengeToken(result.challenge_token ?? null)
         return
       }
+      if (challengeToken) await refreshProfile()
       const destination = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? '/'
       navigate(destination, { replace: true })
     } catch (caught) {
