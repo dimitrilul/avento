@@ -52,6 +52,10 @@ class Login2FARequest(BaseModel):
     code: str = Field(pattern=r"^\d{6}$")
 
 
+class TotpCodeRequest(BaseModel):
+    code: str = Field(pattern=r"^\d{6}$")
+
+
 class TotpSetupResponse(BaseModel):
     secret: str
     otpauth_uri: str

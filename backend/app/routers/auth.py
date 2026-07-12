@@ -24,7 +24,7 @@ from ..schemas import (
     RefreshRequest,
     RegisterRequest,
     TokenResponse,
-    Login2FARequest, LoginChallengeResponse, PasskeyNameRequest, TotpSetupResponse,
+    Login2FARequest, LoginChallengeResponse, PasskeyNameRequest, TotpCodeRequest, TotpSetupResponse,
 )
 from ..mcp_security import revoke_oauth_user_tokens
 from ..security import (
@@ -157,9 +157,9 @@ def totp_setup(current_user: User = Depends(get_current_user), db: Session = Dep
 
 
 @router.post("/totp/enable", status_code=status.HTTP_204_NO_CONTENT)
-def totp_enable(code: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> Response:
+def totp_enable(payload: TotpCodeRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> Response:
     secret = decrypt_factor_secret(current_user.totp_secret_encrypted)
-    if not verify_totp(secret, code):
+    if not verify_totp(secret, payload.code):
         raise HTTPException(status_code=400, detail="Der Authenticator-Code ist ungültig.")
     current_user.totp_enabled = True
     db.commit()
