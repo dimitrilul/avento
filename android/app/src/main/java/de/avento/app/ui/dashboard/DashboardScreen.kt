@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.TrendingFlat
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Landscape
+import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Route
@@ -201,6 +202,11 @@ fun DashboardScreen(
                             DropdownMenuItem(
                                 text = { Text("Meilensteine") },
                                 onClick = { showAccountMenu = false; onNavigate("gamification") },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Gesundheit") },
+                                leadingIcon = { Icon(Icons.Default.MonitorHeart, null) },
+                                onClick = { showAccountMenu = false; onNavigate("health") },
                             )
                             DropdownMenuItem(
                                 text = { Text("Entwicklung & Rückblicke") },

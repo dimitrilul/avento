@@ -123,7 +123,7 @@ fun ErrorPane(message: String, onRetry: (() -> Unit)? = null, modifier: Modifier
 fun EmptyPane(title: String, description: String, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
     ) {
         Column(
@@ -234,7 +234,7 @@ fun ByteArrayImage(
         }
     }
     Box(
-        modifier = modifier.clip(RoundedCornerShape(16.dp)),
+        modifier = modifier.clip(RoundedCornerShape(10.dp)),
         contentAlignment = Alignment.Center,
     ) {
         if (bitmap == null) {

@@ -183,7 +183,7 @@ export function OverlayExportDialog({ open, onClose, activity, points }: { open:
               <Typography variant="subtitle2" fontWeight={800}>Vorschau</Typography>
               {preset.transparent && <Chip size="small" label="Transparenter Hintergrund" />}
             </Stack>
-            <Box sx={{ overflow: 'auto', borderRadius: 3, p: 2, backgroundColor: '#DDE3E1', backgroundImage: 'linear-gradient(45deg, #C9D0CE 25%, transparent 25%), linear-gradient(-45deg, #C9D0CE 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #C9D0CE 75%), linear-gradient(-45deg, transparent 75%, #C9D0CE 75%)', backgroundSize: '24px 24px', backgroundPosition: '0 0, 0 12px, 12px -12px, -12px 0px' }}>
+            <Box sx={{ overflow: 'auto', borderRadius: '12px', p: 2, backgroundColor: '#DDE3E1', backgroundImage: 'linear-gradient(45deg, #C9D0CE 25%, transparent 25%), linear-gradient(-45deg, #C9D0CE 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #C9D0CE 75%), linear-gradient(-45deg, transparent 75%, #C9D0CE 75%)', backgroundSize: '24px 24px', backgroundPosition: '0 0, 0 12px, 12px -12px, -12px 0px' }}>
               <OverlayCanvas ref={exportRef} activity={activity} points={points} preset={preset} metrics={metrics} showRoute={showRoute} showTitle={showTitle} showDate={showDate} showBrand={showBrand} />
             </Box>
           </Box>
@@ -212,7 +212,7 @@ const OverlayCanvas = forwardRef<HTMLDivElement, { activity: Activity; points: T
         </Stack>
 
         {showRoute ? (
-          <Box sx={{ flex: 1, display: 'grid', placeItems: 'center', minHeight: 0, my: 1.25, borderRadius: 5, bgcolor: preset.routePanel ? 'rgba(255,255,255,.09)' : 'transparent', border: preset.routePanel ? `1px solid ${preset.muted}` : 0 }}>
+          <Box data-testid="overlay-route-panel" sx={{ flex: 1, display: 'grid', placeItems: 'center', minHeight: 0, my: 1.25, borderRadius: '12px', bgcolor: preset.routePanel ? 'rgba(255,255,255,.09)' : 'transparent', border: preset.routePanel ? `1px solid ${preset.muted}` : 0 }}>
             <RouteSketch points={points} color={preset.foreground} accent={preset.accent} compact={preset.compact} />
           </Box>
         ) : (

@@ -77,6 +77,25 @@ class Settings(BaseSettings):
     )
     ai_timeout_seconds: float = 20.0
 
+    # Cloudbasierte Google Health API v4. Die Integration ist absichtlich
+    # read-only und unabhängig von Health Connect oder der alten Fit API.
+    google_health_enabled: bool = False
+    google_health_mock_mode: bool = False
+    google_health_client_id: str | None = None
+    google_health_client_secret: str | None = None
+    google_health_redirect_uri: str | None = None
+    google_health_success_redirect_uri: str | None = None
+    google_health_token_encryption_key: str | None = None
+    google_health_api_base_url: str = "https://health.googleapis.com/v4"
+    google_health_authorization_url: str = "https://accounts.google.com/o/oauth2/v2/auth"
+    google_health_token_url: str = "https://oauth2.googleapis.com/token"
+    google_health_revoke_url: str = "https://oauth2.googleapis.com/revoke"
+    google_health_timeout_seconds: float = Field(default=15.0, ge=1.0, le=60.0)
+    google_health_max_retries: int = Field(default=4, ge=0, le=8)
+    google_health_initial_sync_days: int = Field(default=90, ge=7, le=365)
+    google_health_overlap_days: int = Field(default=7, ge=1, le=30)
+    google_health_min_sync_interval_seconds: int = Field(default=30, ge=0, le=3600)
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]

@@ -14,6 +14,7 @@ const ComparePage = lazy(() => import('./pages/ComparePage').then((module) => ({
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })))
 const DevelopmentPage = lazy(() => import('./pages/DevelopmentPage').then((module) => ({ default: module.DevelopmentPage })))
 const GamificationPage = lazy(() => import('./pages/GamificationPage').then((module) => ({ default: module.GamificationPage })))
+const HealthPage = lazy(() => import('./pages/HealthPage').then((module) => ({ default: module.HealthPage })))
 const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })))
 const ProfilePage = lazy(() => import('./pages/ProfilePage').then((module) => ({ default: module.ProfilePage })))
 const RecordsPage = lazy(() => import('./pages/RecordsPage').then((module) => ({ default: module.RecordsPage })))
@@ -40,6 +41,7 @@ export function App() {
           <Route path="/statistiken" element={<StatisticsPage />} />
           <Route path="/entwicklung" element={<DevelopmentPage />} />
           <Route path="/meilensteine" element={<GamificationPage />} />
+          <Route path="/gesundheit" element={<HealthPage />} />
           <Route path="/rekorde" element={<RecordsPage />} />
           <Route path="/vergleich" element={<ComparePage />} />
           <Route path="/coach" element={<ChatPage />} />

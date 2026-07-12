@@ -619,3 +619,175 @@ data class GamificationGoalRequest(
     val period: String,
     val deadline: String? = null,
 )
+
+@JsonClass(generateAdapter = false)
+data class HealthDataSourceSummary(
+    val id: String? = null,
+    @param:Json(name = "recording_method") val recordingMethod: String? = null,
+    val platform: String? = null,
+    @param:Json(name = "device_manufacturer") val deviceManufacturer: String? = null,
+    @param:Json(name = "device_name") val deviceName: String? = null,
+    @param:Json(name = "device_form_factor") val deviceFormFactor: String? = null,
+    @param:Json(name = "application_name") val applicationName: String? = null,
+    @param:Json(name = "last_seen_at") val lastSeenAt: String? = null,
+)
+
+@JsonClass(generateAdapter = false)
+data class HealthConnectionStatus(
+    val provider: String = "google_health_api_v4",
+    val enabled: Boolean = true,
+    @param:Json(name = "mock_mode") val mockMode: Boolean = false,
+    val connected: Boolean = false,
+    val status: String = "disconnected",
+    @param:Json(name = "granted_scopes") val grantedScopes: List<String> = emptyList(),
+    @param:Json(name = "missing_scopes") val missingScopes: List<String> = emptyList(),
+    @param:Json(name = "last_sync_at") val lastSyncAt: String? = null,
+    @param:Json(name = "last_error_code") val lastErrorCode: String? = null,
+    @param:Json(name = "data_sources") val sources: List<HealthDataSourceSummary> = emptyList(),
+)
+
+@JsonClass(generateAdapter = false)
+data class HealthOAuthStart(
+    @param:Json(name = "authorization_url") val authorizationUrl: String,
+    @param:Json(name = "expires_at") val expiresAt: String,
+    @param:Json(name = "mock_mode") val mockMode: Boolean = false,
+)
+
+@JsonClass(generateAdapter = false)
+data class HealthSyncRequest(
+    @param:Json(name = "lookback_days") val lookbackDays: Int? = null,
+)
+
+@JsonClass(generateAdapter = false)
+data class HealthSyncResult(
+    @param:Json(name = "run_id") val runId: String,
+    val status: String,
+    @param:Json(name = "range_start") val rangeStart: String,
+    @param:Json(name = "range_end") val rangeEnd: String,
+    @param:Json(name = "fetched_count") val fetchedCount: Int = 0,
+    @param:Json(name = "stored_count") val storedCount: Int = 0,
+    @param:Json(name = "rejected_count") val rejectedCount: Int = 0,
+    @param:Json(name = "error_code") val errorCode: String? = null,
+)
+
+@JsonClass(generateAdapter = false)
+data class HealthMetric(
+    @param:Json(name = "metric_type") val metricType: String,
+    val value: Double,
+    val unit: String,
+    @param:Json(name = "observed_at") val observedAt: String? = null,
+    @param:Json(name = "start_at") val startAt: String? = null,
+    @param:Json(name = "end_at") val endAt: String? = null,
+    @param:Json(name = "local_date") val localDate: String? = null,
+    @param:Json(name = "imported_at") val importedAt: String? = null,
+)
+
+@JsonClass(generateAdapter = false)
+data class HealthHeartRateAggregate(
+    val granularity: String,
+    @param:Json(name = "start_at") val startAt: String,
+    @param:Json(name = "end_at") val endAt: String,
+    @param:Json(name = "local_date") val localDate: String? = null,
+    @param:Json(name = "min_bpm") val minBpm: Double,
+    @param:Json(name = "avg_bpm") val averageBpm: Double,
+    @param:Json(name = "max_bpm") val maxBpm: Double,
+    @param:Json(name = "sleep_session_id") val sleepSessionId: String? = null,
+    @param:Json(name = "exercise_id") val exerciseId: String? = null,
+)
+
+@JsonClass(generateAdapter = false)
+data class HealthSleepStage(
+    @param:Json(name = "start_at") val startAt: String,
+    @param:Json(name = "end_at") val endAt: String,
+    @param:Json(name = "stage_type") val stageType: String,
+)
+
+@JsonClass(generateAdapter = false)
+data class HealthSleepSession(
+    val id: String,
+    @param:Json(name = "start_at") val startAt: String,
+    @param:Json(name = "end_at") val endAt: String,
+    @param:Json(name = "local_date") val localDate: String,
+    @param:Json(name = "sleep_type") val sleepType: String,
+    @param:Json(name = "is_nap") val isNap: Boolean = false,
+    @param:Json(name = "minutes_asleep") val minutesAsleep: Int? = null,
+    @param:Json(name = "minutes_awake") val minutesAwake: Int? = null,
+    @param:Json(name = "overlaps_other_session") val overlapsOtherSession: Boolean = false,
+    val stages: List<HealthSleepStage> = emptyList(),
+)
+
+@JsonClass(generateAdapter = false)
+data class HealthExercise(
+    val id: String,
+    @param:Json(name = "start_at") val startAt: String,
+    @param:Json(name = "end_at") val endAt: String,
+    @param:Json(name = "local_date") val localDate: String,
+    @param:Json(name = "exercise_type") val exerciseType: String,
+    val title: String? = null,
+    @param:Json(name = "active_duration_seconds") val activeDurationSeconds: Double? = null,
+    @param:Json(name = "calories_kcal") val caloriesKcal: Double? = null,
+    @param:Json(name = "distance_m") val distanceMeters: Double? = null,
+    val steps: Int? = null,
+    @param:Json(name = "average_heart_rate_bpm") val averageHeartRateBpm: Int? = null,
+    @param:Json(name = "active_zone_minutes") val activeZoneMinutes: Int? = null,
+    @param:Json(name = "heart_rate_zone_seconds") val heartRateZoneSeconds: Map<String, Double> = emptyMap(),
+)
+
+@JsonClass(generateAdapter = false)
+data class HealthData(
+    val metrics: List<HealthMetric> = emptyList(),
+    @param:Json(name = "heart_rate") val heartRate: List<HealthHeartRateAggregate> = emptyList(),
+    val sleeps: List<HealthSleepSession> = emptyList(),
+    val exercises: List<HealthExercise> = emptyList(),
+) {
+    val isEmpty: Boolean
+        get() = metrics.isEmpty() && heartRate.isEmpty() && sleeps.isEmpty() && exercises.isEmpty()
+}
+
+@JsonClass(generateAdapter = false)
+data class HealthScoreCoverage(
+    val fraction: Double = 0.0,
+    val percent: Double = 0.0,
+    @param:Json(name = "missing_required_signals") val missingRequiredSignals: List<String> = emptyList(),
+)
+
+@JsonClass(generateAdapter = false)
+data class HealthScoreFactor(
+    val key: String = "",
+    val label: String = "",
+    val weight: Double = 0.0,
+    val unit: String? = null,
+    @param:Json(name = "current_value") val currentValue: Double? = null,
+    @param:Json(name = "baseline_value") val baselineValue: Double? = null,
+    @param:Json(name = "baseline_window_days") val baselineWindowDays: Int? = null,
+    @param:Json(name = "contribution_points") val contributionPoints: Double = 0.0,
+    val impact: String = "unavailable",
+    val status: String = "missing_current_data",
+    val reason: String? = null,
+)
+
+@JsonClass(generateAdapter = false)
+data class HealthScore(
+    val key: String = "",
+    val label: String = "",
+    val value: Int? = null,
+    val unit: String = "Punkte",
+    val status: String = "unavailable",
+    val level: String? = null,
+    val confidence: String = "niedrig",
+    @param:Json(name = "data_coverage") val dataCoverage: HealthScoreCoverage = HealthScoreCoverage(),
+    @param:Json(name = "important_factors") val importantFactors: List<HealthScoreFactor> = emptyList(),
+    val factors: List<HealthScoreFactor> = emptyList(),
+    val disclaimer: String? = null,
+)
+
+@JsonClass(generateAdapter = false)
+data class HealthOverview(
+    val date: String,
+    @param:Json(name = "generated_at") val generatedAt: String,
+    val scores: Map<String, HealthScore> = emptyMap(),
+    val factors: List<Map<String, Any?>> = emptyList(),
+    val coverage: Map<String, Double> = emptyMap(),
+    val baselines: Map<String, Any?> = emptyMap(),
+    val uncertainty: List<String> = emptyList(),
+)

@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom'
 import { authApi, profileApi, type HeartRateZone } from '../api'
 import { useAuth } from '../auth/AuthContext'
 import { AvatarCropDialog } from '../components/AvatarCropDialog'
+import { GoogleHealthConnection } from '../components/GoogleHealthConnection'
 import { PageHeader } from '../components/PageHeader'
 import { errorMessage, formatDateTime } from '../utils/format'
 
@@ -89,6 +90,7 @@ export function ProfilePage() {
       </Stack></CardContent></Card>
       <Stack spacing={2.5}>
         <Card><CardContent><Typography variant="h3">Konto</Typography><Typography color="text.secondary" sx={{ my: 2 }}>Du bist als {profile?.email} angemeldet.</Typography><Button color="error" variant="outlined" startIcon={<LogoutRoundedIcon />} onClick={() => void signOut()}>Abmelden</Button></CardContent></Card>
+        <GoogleHealthConnection />
         <SecurityCard />
         <ChangePasswordCard />
         {profile?.is_admin && <><InviteCard /><AdminPasswordResetCard /></>}

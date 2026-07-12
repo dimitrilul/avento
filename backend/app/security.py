@@ -77,6 +77,42 @@ def decrypt_factor_secret(value: str | None) -> str | None:
         return None
 
 
+HEALTH_SECRET_VERSION = "v1"
+
+
+def _health_secret_cipher() -> Fernet:
+    key = get_settings().google_health_token_encryption_key
+    if not key:
+        raise RuntimeError("AVENTO_GOOGLE_HEALTH_TOKEN_ENCRYPTION_KEY ist nicht gesetzt.")
+    try:
+        return Fernet(key.encode("ascii"))
+    except (ValueError, UnicodeEncodeError) as exc:
+        raise RuntimeError(
+            "AVENTO_GOOGLE_HEALTH_TOKEN_ENCRYPTION_KEY ist kein gültiger Fernet-Schlüssel."
+        ) from exc
+
+
+def encrypt_health_secret(value: str) -> str:
+    """Encrypt a Google Health token/PKCE value with an explicit format version."""
+
+    if not value:
+        raise ValueError("Ein leerer Google-Health-Geheimwert darf nicht gespeichert werden.")
+    encrypted = _health_secret_cipher().encrypt(value.encode("utf-8")).decode("ascii")
+    return f"{HEALTH_SECRET_VERSION}:{encrypted}"
+
+
+def decrypt_health_secret(value: str | None) -> str | None:
+    if not value:
+        return None
+    version, separator, encrypted = value.partition(":")
+    if separator != ":" or version != HEALTH_SECRET_VERSION or not encrypted:
+        raise ValueError("Unbekannte Version eines Google-Health-Geheimwerts.")
+    try:
+        return _health_secret_cipher().decrypt(encrypted.encode("ascii")).decode("utf-8")
+    except (InvalidToken, UnicodeDecodeError, UnicodeEncodeError) as exc:
+        raise ValueError("Google-Health-Geheimwert konnte nicht entschlüsselt werden.") from exc
+
+
 def generate_totp_secret() -> str:
     return base64.b32encode(secrets.token_bytes(20)).decode().rstrip("=")
 

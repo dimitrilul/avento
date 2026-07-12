@@ -29,7 +29,7 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
       severity="error"
       icon={<CloudOffRoundedIcon />}
       action={onRetry ? <Button color="inherit" onClick={onRetry}>Erneut versuchen</Button> : undefined}
-      sx={{ borderRadius: 3 }}
+      sx={{ borderRadius: '12px' }}
     >
       {message}
     </Alert>
@@ -47,7 +47,7 @@ export function EmptyState({
 }) {
   return (
     <Stack alignItems="center" textAlign="center" spacing={1.5} sx={{ py: 8, px: 3 }}>
-      <Box sx={{ width: 60, height: 60, display: 'grid', placeItems: 'center', borderRadius: 4, bgcolor: 'action.hover', color: 'text.secondary' }}>
+      <Box sx={{ width: 60, height: 60, display: 'grid', placeItems: 'center', borderRadius: '12px', bgcolor: 'action.hover', color: 'text.secondary' }}>
         <InboxRoundedIcon fontSize="large" />
       </Box>
       <Typography variant="h3">{title}</Typography>
