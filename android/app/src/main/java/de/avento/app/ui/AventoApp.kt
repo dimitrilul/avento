@@ -27,10 +27,26 @@ import de.avento.app.ui.auth.PasswordResetScreen
 import de.avento.app.ui.auth.RegistrationMode
 import de.avento.app.ui.auth.RegistrationScreen
 import de.avento.app.ui.auth.ServerSetupScreen
+import de.avento.app.ui.activities.ActivitiesScreen
+import de.avento.app.ui.activities.ActivitiesViewModel
+import de.avento.app.ui.chat.ChatScreen
+import de.avento.app.ui.chat.ChatViewModel
+import de.avento.app.ui.compare.CompareScreen
+import de.avento.app.ui.compare.CompareViewModel
 import de.avento.app.ui.dashboard.DashboardScreen
 import de.avento.app.ui.dashboard.DashboardViewModel
 import de.avento.app.ui.detail.DetailScreen
 import de.avento.app.ui.detail.DetailViewModel
+import de.avento.app.ui.gamification.GamificationScreen
+import de.avento.app.ui.gamification.GamificationViewModel
+import de.avento.app.ui.insights.InsightsScreen
+import de.avento.app.ui.insights.InsightsViewModel
+import de.avento.app.ui.profile.ProfileScreen
+import de.avento.app.ui.profile.ProfileViewModel
+import de.avento.app.ui.records.RecordsScreen
+import de.avento.app.ui.records.RecordsViewModel
+import de.avento.app.ui.statistics.StatisticsScreen
+import de.avento.app.ui.statistics.StatisticsViewModel
 import kotlinx.coroutines.flow.map
 
 private object Routes {
@@ -39,6 +55,14 @@ private object Routes {
     const val Bootstrap = "bootstrap"
     const val PasswordReset = "password-reset"
     const val Dashboard = "dashboard"
+    const val Activities = "activities"
+    const val Statistics = "statistics"
+    const val Records = "records"
+    const val Compare = "compare"
+    const val Gamification = "gamification"
+    const val Insights = "insights"
+    const val Chat = "chat"
+    const val Profile = "profile"
     const val Detail = "activity/{activityId}"
     fun detail(id: String) = "activity/$id"
 }
@@ -145,10 +169,43 @@ private fun ConnectedAventoApp(container: AppContainer, connection: ServerState.
                 onImportOffered = container::offerImport,
                 onImportConsumed = container::consumeImport,
                 onOpenActivity = { navController.navigate(Routes.detail(it)) },
+                onNavigate = { route -> navController.navigate(route) },
                 onLoggedOut = {
                     navController.navigate(Routes.Login) { popUpTo(Routes.Dashboard) { inclusive = true } }
                 },
             )
+        }
+        composable(Routes.Activities) {
+            val vm: ActivitiesViewModel = viewModel(factory = SimpleViewModelFactory { ActivitiesViewModel(repository, errorMapper) })
+            ActivitiesScreen(vm, onOpenActivity = { navController.navigate(Routes.detail(it)) })
+        }
+        composable(Routes.Statistics) {
+            val vm: StatisticsViewModel = viewModel(factory = SimpleViewModelFactory { StatisticsViewModel(repository, errorMapper) })
+            StatisticsScreen(vm)
+        }
+        composable(Routes.Records) {
+            val vm: RecordsViewModel = viewModel(factory = SimpleViewModelFactory { RecordsViewModel(repository, errorMapper) })
+            RecordsScreen(vm, onBack = { navController.popBackStack() }, onOpenActivity = { navController.navigate(Routes.detail(it)) })
+        }
+        composable(Routes.Compare) {
+            val vm: CompareViewModel = viewModel(factory = SimpleViewModelFactory { CompareViewModel(repository, errorMapper) })
+            CompareScreen(vm, onOpenActivity = { navController.navigate(Routes.detail(it)) })
+        }
+        composable(Routes.Gamification) {
+            val vm: GamificationViewModel = viewModel(factory = SimpleViewModelFactory { GamificationViewModel(repository, errorMapper) })
+            GamificationScreen(vm)
+        }
+        composable(Routes.Insights) {
+            val vm: InsightsViewModel = viewModel(factory = SimpleViewModelFactory { InsightsViewModel(repository, errorMapper) })
+            InsightsScreen(vm)
+        }
+        composable(Routes.Chat) {
+            val vm: ChatViewModel = viewModel(factory = SimpleViewModelFactory { ChatViewModel(repository, errorMapper) })
+            ChatScreen(vm)
+        }
+        composable(Routes.Profile) {
+            val vm: ProfileViewModel = viewModel(factory = SimpleViewModelFactory { ProfileViewModel(repository, errorMapper) })
+            ProfileScreen(vm)
         }
         composable(
             route = Routes.Detail,

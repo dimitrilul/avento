@@ -48,6 +48,19 @@ class Settings(BaseSettings):
     weather_timeout_seconds: float = 8.0
     weather_route_samples: int = Field(default=7, ge=3, le=12)
 
+    # Reverse geocoding is deliberately opt-in because route coordinates are
+    # personal data. The endpoint can be switched without a client update.
+    reverse_geocoding_provider: str = "disabled"
+    reverse_geocoding_base_url: str | None = None
+    reverse_geocoding_timeout_seconds: float = Field(default=3.0, ge=0.1, le=10.0)
+    reverse_geocoding_max_samples: int = Field(default=8, ge=0, le=12)
+    reverse_geocoding_minimum_spacing_m: float = Field(default=1_500.0, ge=0, le=1_000_000)
+    reverse_geocoding_coordinate_precision: int = Field(default=4, ge=3, le=6)
+    reverse_geocoding_user_agent: str = "Avento/0.1 (self-hosted route insights)"
+    reverse_geocoding_language: str = "de"
+    reverse_geocoding_maximum_failures: int = Field(default=2, ge=1, le=3)
+    reverse_geocoding_backfill_mode: bool = False
+
     openai_api_key: str | None = Field(
         default=None,
         validation_alias=AliasChoices("AVENTO_OPENAI_API_KEY", "OPENAI_API_KEY", "AVENTO_AI_API_KEY"),

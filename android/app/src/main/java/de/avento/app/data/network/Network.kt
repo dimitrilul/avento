@@ -18,11 +18,15 @@ import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import retrofit2.HttpException
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
+import java.util.concurrent.TimeUnit
 
 class NetworkProvider(private val tokenStore: TokenStore, private val baseUrl: String) {
     val moshi: Moshi = Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build()
 
     private val publicClient = OkHttpClient.Builder()
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(90, TimeUnit.SECONDS)
+        .writeTimeout(90, TimeUnit.SECONDS)
         .addInterceptor(loggingInterceptor())
         .build()
 
@@ -30,6 +34,9 @@ class NetworkProvider(private val tokenStore: TokenStore, private val baseUrl: S
 
     val authenticatedApi: AventoApi by lazy {
         val client = OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(90, TimeUnit.SECONDS)
+            .writeTimeout(90, TimeUnit.SECONDS)
             .addInterceptor(BearerInterceptor(tokenStore))
             .authenticator(TokenAuthenticator(tokenStore, publicApi))
             .addInterceptor(loggingInterceptor())
@@ -111,7 +118,9 @@ fun Throwable.toGermanMessage(moshi: Moshi? = null): String = when (this) {
     is HttpException -> {
         val detail = runCatching {
             val body = response()?.errorBody()?.string().orEmpty()
-            moshi?.adapter(ApiError::class.java)?.fromJson(body)?.detail
+            moshi?.adapter(ApiError::class.java)?.fromJson(body)?.let { error ->
+                error.message ?: error.detail.asMessage()
+            }
         }.getOrNull()
         detail ?: when (code()) {
             400 -> "Die Anfrage ist ungültig."
@@ -119,11 +128,20 @@ fun Throwable.toGermanMessage(moshi: Moshi? = null): String = when (this) {
             403 -> "Du hast dafür keine Berechtigung."
             404 -> "Die angeforderten Daten wurden nicht gefunden."
             409 -> "Diese Aktivität wurde bereits importiert."
-            413 -> "Die TCX-Datei ist zu groß."
+            413 -> "Die ausgewählte Datei ist zu groß."
+            422 -> "Die eingegebenen Daten sind ungültig."
+            429 -> "Zu viele Anfragen. Bitte versuche es später erneut."
             in 500..599 -> "Der Server ist gerade nicht erreichbar."
             else -> "Die Anfrage ist fehlgeschlagen (${code()})."
         }
     }
     is IOException -> "Keine Verbindung zum Avento-Server."
     else -> message ?: "Ein unerwarteter Fehler ist aufgetreten."
+}
+
+private fun Any?.asMessage(): String? = when (this) {
+    is String -> takeIf(String::isNotBlank)
+    is Map<*, *> -> (this["message"] ?: this["detail"] ?: this["msg"]).asMessage()
+    is List<*> -> mapNotNull { item -> item.asMessage() }.joinToString(" ").takeIf(String::isNotBlank)
+    else -> null
 }

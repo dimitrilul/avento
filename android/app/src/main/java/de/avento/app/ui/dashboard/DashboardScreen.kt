@@ -99,6 +99,7 @@ fun DashboardScreen(
     onImportOffered: (PendingImport) -> Unit,
     onImportConsumed: () -> Unit,
     onOpenActivity: (String) -> Unit,
+    onNavigate: (String) -> Unit,
     onLoggedOut: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -189,6 +190,31 @@ fun DashboardScreen(
                                 )
                                 HorizontalDivider()
                             }
+                            DropdownMenuItem(
+                                text = { Text("Aktivitäten") },
+                                onClick = { showAccountMenu = false; onNavigate("activities") },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Statistiken") },
+                                onClick = { showAccountMenu = false; onNavigate("statistics") },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Meilensteine") },
+                                onClick = { showAccountMenu = false; onNavigate("gamification") },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Entwicklung & Rückblicke") },
+                                onClick = { showAccountMenu = false; onNavigate("insights") },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Avento Insights") },
+                                onClick = { showAccountMenu = false; onNavigate("chat") },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Profil") },
+                                onClick = { showAccountMenu = false; onNavigate("profile") },
+                            )
+                            HorizontalDivider()
                             DropdownMenuItem(
                                 text = { Text("Abmelden") },
                                 leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, null) },

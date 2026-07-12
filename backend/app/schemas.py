@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
@@ -476,3 +477,369 @@ class ChatResponse(BaseModel):
     sources: list[ChatSource] = Field(default_factory=list)
     tools_used: list[str] = Field(default_factory=list)
     data_basis: AIDataBasis | None = None
+
+
+class GamificationMetric(str, Enum):
+    distance_m = "distance_m"
+    activity_count = "activity_count"
+    elevation_gain_m = "elevation_gain_m"
+    moving_time_s = "moving_time_s"
+    training_load = "training_load"
+    active_weeks = "active_weeks"
+    places_visited = "places_visited"
+    hydration_activity_count = "hydration_activity_count"
+    hydration_ml = "hydration_ml"
+    recovery_gap_count = "recovery_gap_count"
+    intensity_variety = "intensity_variety"
+    weather_activity_count = "weather_activity_count"
+    village_count = "village_count"
+    city_count = "city_count"
+    municipality_count = "municipality_count"
+    state_count = "state_count"
+    country_count = "country_count"
+    longest_ride_m = "longest_ride_m"
+    highest_elevation_m = "highest_elevation_m"
+    best_average_speed_mps = "best_average_speed_mps"
+
+
+class GamificationPeriod(str, Enum):
+    week = "week"
+    month = "month"
+    year = "year"
+    custom = "custom"
+    lifetime = "lifetime"
+
+
+class GamificationDiscoveryKind(str, Enum):
+    village = "village"
+    city = "city"
+    municipality = "municipality"
+    state = "state"
+    country = "country"
+
+
+def _trim_gamification_text(value: str) -> str:
+    normalized = " ".join(value.split())
+    if not normalized:
+        raise ValueError("Der Text darf nicht leer sein.")
+    return normalized
+
+
+class GamificationGoalCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
+
+    title: str = Field(min_length=1, max_length=80)
+    description: str | None = Field(default=None, max_length=500)
+    metric: GamificationMetric
+    target_value: float = Field(gt=0, le=1_000_000_000_000)
+    period: GamificationPeriod = GamificationPeriod.custom
+    starts_at: date | None = None
+    deadline: date | None = None
+
+    @field_validator("title")
+    @classmethod
+    def normalize_title(cls, value: str) -> str:
+        return _trim_gamification_text(value)
+
+    @field_validator("description")
+    @classmethod
+    def normalize_description(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = " ".join(value.split())
+        return normalized or None
+
+    @field_validator("starts_at", "deadline")
+    @classmethod
+    def supported_goal_date(cls, value: date | None) -> date | None:
+        if value is not None and not date(1900, 1, 1) <= value <= date(9998, 12, 31):
+            raise ValueError("Gamification-Zeiträume müssen zwischen 1900 und 9998 liegen.")
+        return value
+
+    @model_validator(mode="after")
+    def goal_dates_are_ordered(self) -> "GamificationGoalCreate":
+        if self.starts_at and self.deadline and self.deadline < self.starts_at:
+            raise ValueError("Das Enddatum muss am oder nach dem Startdatum liegen.")
+        return self
+
+
+class GamificationGoalUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
+
+    title: str | None = Field(default=None, min_length=1, max_length=80)
+    description: str | None = Field(default=None, max_length=500)
+    metric: GamificationMetric | None = None
+    target_value: float | None = Field(default=None, gt=0, le=1_000_000_000_000)
+    period: GamificationPeriod | None = None
+    starts_at: date | None = None
+    deadline: date | None = None
+    status: str | None = Field(default=None, pattern=r"^(active|paused)$")
+
+    @field_validator("title")
+    @classmethod
+    def normalize_title(cls, value: str | None) -> str | None:
+        return _trim_gamification_text(value) if value is not None else None
+
+    @field_validator("description")
+    @classmethod
+    def normalize_description(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = " ".join(value.split())
+        return normalized or None
+
+    @field_validator("starts_at", "deadline")
+    @classmethod
+    def supported_goal_date(cls, value: date | None) -> date | None:
+        if value is not None and not date(1900, 1, 1) <= value <= date(9998, 12, 31):
+            raise ValueError("Gamification-Zeiträume müssen zwischen 1900 und 9998 liegen.")
+        return value
+
+    @model_validator(mode="after")
+    def goal_dates_are_ordered(self) -> "GamificationGoalUpdate":
+        if self.starts_at and self.deadline and self.deadline < self.starts_at:
+            raise ValueError("Das Enddatum muss am oder nach dem Startdatum liegen.")
+        return self
+
+
+class GamificationGoalResponse(BaseModel):
+    id: str
+    title: str
+    description: str | None = None
+    metric: str
+    current_value: float
+    target_value: float
+    unit: str
+    period: str
+    progress_percent: float
+    remaining_value: float
+    status: str
+    starts_at: date | None = None
+    deadline: date | None = None
+    completed_at: datetime | None = None
+    reward_xp: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class GamificationGoalListResponse(BaseModel):
+    items: list[GamificationGoalResponse]
+    total: int
+
+
+class GamificationChallengeCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
+
+    title: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=1000)
+    metric: GamificationMetric
+    target_value: float = Field(gt=0, le=1_000_000_000_000)
+    duration_days: int = Field(default=7, ge=1, le=366)
+    weather_sensitive: bool = False
+    safety_note: str | None = Field(default=None, max_length=500)
+
+    @field_validator("title")
+    @classmethod
+    def normalize_title(cls, value: str) -> str:
+        return _trim_gamification_text(value)
+
+    @field_validator("description", "safety_note")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = " ".join(value.split())
+        return normalized
+
+
+class GamificationChallengeUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
+
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=1000)
+    metric: GamificationMetric | None = None
+    target_value: float | None = Field(default=None, gt=0, le=1_000_000_000_000)
+    duration_days: int | None = Field(default=None, ge=1, le=366)
+    weather_sensitive: bool | None = None
+    safety_note: str | None = Field(default=None, max_length=500)
+
+    @field_validator("title")
+    @classmethod
+    def normalize_title(cls, value: str | None) -> str | None:
+        return _trim_gamification_text(value) if value is not None else None
+
+    @field_validator("description", "safety_note")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return " ".join(value.split())
+
+
+class GamificationChallengeAccept(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    starts_at: date | None = None
+
+    @field_validator("starts_at")
+    @classmethod
+    def supported_start_date(cls, value: date | None) -> date | None:
+        if value is not None and not date(1900, 1, 1) <= value <= date(9998, 12, 31):
+            raise ValueError("Der Challenge-Start muss zwischen 1900 und 9998 liegen.")
+        return value
+
+
+class GamificationChallengeResponse(BaseModel):
+    id: str
+    title: str
+    description: str
+    metric: str
+    current_value: float
+    target_value: float
+    unit: str
+    progress_percent: float
+    remaining_value: float
+    duration_days: int
+    reward_xp: int
+    status: str
+    source: str
+    ai_generated: bool
+    personalization_reason: str | None = None
+    weather_sensitive: bool
+    safety_note: str | None = None
+    starts_at: date | None = None
+    expires_at: date | None = None
+    accepted_at: datetime | None = None
+    completed_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class GamificationChallengeListResponse(BaseModel):
+    items: list[GamificationChallengeResponse]
+    total: int
+    ai_challenges_available: bool
+
+
+class GamificationBadgeResponse(BaseModel):
+    id: str
+    key: str
+    name: str
+    description: str
+    category: str
+    tier: str
+    icon: str | None = None
+    reward_xp: int
+    unlocked: bool
+    unlocked_at: datetime | None = None
+    source_activity_id: str | None = None
+    current_value: float
+    target_value: float
+    unit: str
+    progress_percent: float
+
+
+class GamificationBadgeListResponse(BaseModel):
+    items: list[GamificationBadgeResponse]
+    total: int
+    unlocked: int
+
+
+class GamificationLevelResponse(BaseModel):
+    level: int
+    name: str
+    total_xp: int
+    current_xp: int
+    next_level_xp: int
+    progress_percent: float
+    breakdown: dict[str, int] = Field(default_factory=dict)
+
+
+class GamificationStreakResponse(BaseModel):
+    current_weeks: int
+    best_weeks: int
+    weekly_target: int
+    current_week_progress: int
+    pause_protection_available: bool
+    pause_protection_active: bool
+    protected_until: date | None = None
+    next_check_at: datetime | None = None
+    active_week_starts: list[date] = Field(default_factory=list)
+    method: str
+
+
+class GamificationRecordChaseResponse(BaseModel):
+    id: str
+    title: str
+    description: str
+    metric: str
+    current_value: float
+    target_value: float
+    unit: str
+    progress_percent: float
+    activity_id: str | None = None
+    achieved: bool
+
+
+class GamificationDiscoveryResponse(BaseModel):
+    id: str
+    kind: str
+    name: str
+    region: str | None = None
+    country_code: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    first_discovered_at: datetime
+    first_activity_id: str | None = None
+
+
+class GamificationDiscoverySummary(BaseModel):
+    scope: str
+    label: str
+    count: int
+    total_available: int | None = None
+    progress_percent: float | None = None
+    places: list[str] = Field(default_factory=list)
+
+
+class GamificationDiscoveryListResponse(BaseModel):
+    items: list[GamificationDiscoveryResponse]
+    total: int
+    by_scope: list[GamificationDiscoverySummary]
+
+
+class GamificationAnnualAwardResponse(BaseModel):
+    id: str
+    key: str
+    year: int
+    title: str
+    description: str
+    value: float | None = None
+    unit: str | None = None
+    tier: str
+    earned: bool
+    earned_at: datetime | None = None
+    icon: str | None = None
+    reward_xp: int
+    is_final: bool
+
+
+class GamificationAnnualAwardListResponse(BaseModel):
+    items: list[GamificationAnnualAwardResponse]
+    total: int
+    years: list[int]
+
+
+class GamificationOverviewResponse(BaseModel):
+    generated_at: datetime
+    privacy: str = "private"
+    level: GamificationLevelResponse
+    goals: list[GamificationGoalResponse]
+    active_challenges: list[GamificationChallengeResponse]
+    challenge_suggestions: list[GamificationChallengeResponse]
+    ai_challenges_available: bool
+    badges: list[GamificationBadgeResponse]
+    streak: GamificationStreakResponse
+    record_chases: list[GamificationRecordChaseResponse]
+    discoveries: list[GamificationDiscoverySummary]
+    annual_awards: list[GamificationAnnualAwardResponse]

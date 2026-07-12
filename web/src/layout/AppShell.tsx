@@ -9,6 +9,7 @@ import EmojiEventsRoundedIcon from '@mui/icons-material/EmojiEventsRounded'
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded'
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded'
 import SmartToyRoundedIcon from '@mui/icons-material/SmartToyRounded'
+import StarsRoundedIcon from '@mui/icons-material/StarsRounded'
 import TimelineRoundedIcon from '@mui/icons-material/TimelineRounded'
 import {
   AppBar,
@@ -36,6 +37,7 @@ const drawerWidth = 248
 const nav = [
   { label: 'Übersicht', path: '/', icon: <DashboardRoundedIcon /> },
   { label: 'Aktivitäten', path: '/aktivitaeten', icon: <DirectionsBikeRoundedIcon /> },
+  { label: 'Meilensteine', path: '/meilensteine', icon: <StarsRoundedIcon /> },
   { label: 'Entwicklung', path: '/entwicklung', icon: <TimelineRoundedIcon /> },
   { label: 'Rekorde', path: '/rekorde', icon: <EmojiEventsRoundedIcon /> },
   { label: 'Statistiken', path: '/statistiken', icon: <BarChartRoundedIcon /> },

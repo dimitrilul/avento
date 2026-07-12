@@ -1,7 +1,11 @@
 package de.avento.app.ui.detail
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -61,6 +66,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,8 +80,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.avento.app.data.model.Activity
+import de.avento.app.data.model.ActivityPhoto
 import de.avento.app.data.model.TrackPoint
 import de.avento.app.data.model.WeatherResponse
+import de.avento.app.ui.components.ByteArrayImage
 import de.avento.app.ui.components.LineChart
 import de.avento.app.ui.components.RoutePreview
 import de.avento.app.ui.theme.AventoPalette
@@ -86,8 +94,12 @@ import de.avento.app.util.asElevation
 import de.avento.app.util.asGermanDateTime
 import de.avento.app.util.asInteger
 import de.avento.app.util.asSpeed
+import de.avento.app.util.readPhoto
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -98,6 +110,14 @@ fun DetailScreen(viewModel: DetailViewModel, onBack: () -> Unit, onDeleted: () -
     var showEdit by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            runCatching { withContext(Dispatchers.IO) { context.contentResolver.readPhoto(uri) } }
+                .onSuccess { file -> viewModel.uploadPhoto(file.bytes, file.displayName, file.contentType) }
+        }
+    }
 
     LaunchedEffect(state.error, state.message) {
         val notice = state.error ?: state.message
@@ -144,6 +164,11 @@ fun DetailScreen(viewModel: DetailViewModel, onBack: () -> Unit, onDeleted: () -
                                         showMenu = false
                                         SummaryImageExporter.share(context, activity, state.track)
                                     },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("KI-Daten neu analysieren") },
+                                    leadingIcon = { Icon(Icons.Default.AutoAwesome, null) },
+                                    onClick = { showMenu = false; viewModel.reanalyze() },
                                 )
                                 DropdownMenuItem(
                                     text = { Text("Bearbeiten") },
@@ -193,6 +218,11 @@ fun DetailScreen(viewModel: DetailViewModel, onBack: () -> Unit, onDeleted: () -
                 onRefreshWeather = viewModel::refreshWeather,
                 onGenerateSummary = { viewModel.generateSummary(state.summary != null) },
                 onEdit = { showEdit = true },
+                photos = state.photos,
+                uploadingPhoto = state.uploadingPhoto,
+                onPickPhoto = { photoPicker.launch("image/*") },
+                onDeletePhoto = viewModel::deletePhoto,
+                loadPhoto = viewModel::photoBytes,
                 contentPadding = padding,
             )
             else -> Column(
@@ -209,8 +239,8 @@ fun DetailScreen(viewModel: DetailViewModel, onBack: () -> Unit, onDeleted: () -
     }
 
     if (showEdit) state.activity?.let { activity ->
-        EditDialog(activity, state.saving, { showEdit = false }) { title, type, notes ->
-            viewModel.save(title, type, notes) { showEdit = false }
+        EditDialog(activity, state.saving, { showEdit = false }) { title, type, notes, hydration ->
+            viewModel.save(title, type, notes, hydration) { showEdit = false }
         }
     }
     if (showDelete) {
@@ -250,6 +280,11 @@ private fun ActivityContent(
     onRefreshWeather: () -> Unit,
     onGenerateSummary: () -> Unit,
     onEdit: () -> Unit,
+    photos: List<ActivityPhoto>,
+    uploadingPhoto: Boolean,
+    onPickPhoto: () -> Unit,
+    onDeletePhoto: (ActivityPhoto) -> Unit,
+    loadPhoto: suspend (ActivityPhoto) -> ByteArray,
     contentPadding: PaddingValues,
 ) {
     LazyColumn(
@@ -265,6 +300,7 @@ private fun ActivityContent(
         item {
             AiCard(summary, summaryProvider, generatingSummary, onGenerateSummary)
         }
+        item { PhotoGallery(photos, uploadingPhoto, onPickPhoto, onDeletePhoto, loadPhoto) }
         item {
             WeatherCard(weather, activity.weather, refreshingWeather, onRefreshWeather)
         }
@@ -310,6 +346,45 @@ private fun ActivityContent(
         item { HeartRateZones(activity) }
         item { NotesCard(activity.notes, onEdit) }
     }
+}
+
+@Composable
+private fun PhotoGallery(
+    photos: List<ActivityPhoto>,
+    uploading: Boolean,
+    onPick: () -> Unit,
+    onDelete: (ActivityPhoto) -> Unit,
+    loadPhoto: suspend (ActivityPhoto) -> ByteArray,
+) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Aktivitätsfotos", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
+                OutlinedButton(onClick = onPick, enabled = !uploading) { Text(if (uploading) "Lädt …" else "Hinzufügen") }
+            }
+            if (photos.isEmpty()) {
+                Text("Noch keine Fotos zu dieser Aktivität.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    photos.take(8).forEach { photo ->
+                        Column(Modifier.width(150.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            PhotoThumbnail(photo, loadPhoto)
+                            Text(photo.caption ?: photo.originalFilename, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                            TextButton(onClick = { onDelete(photo) }) { Text("Löschen") }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PhotoThumbnail(photo: ActivityPhoto, loadPhoto: suspend (ActivityPhoto) -> ByteArray) {
+    val bytes by androidx.compose.runtime.produceState<ByteArray?>(initialValue = null, key1 = photo.id) {
+        value = runCatching { loadPhoto(photo) }.getOrNull()
+    }
+    ByteArrayImage(bytes, photo.caption ?: photo.originalFilename, Modifier.size(150.dp))
 }
 
 @Composable
@@ -837,11 +912,12 @@ private fun EditDialog(
     activity: Activity,
     saving: Boolean,
     onDismiss: () -> Unit,
-    onSave: (String?, String?, String?) -> Unit,
+    onSave: (String?, String?, String?, Int?) -> Unit,
 ) {
     var title by remember(activity.id) { mutableStateOf(activity.title.orEmpty()) }
     var type by remember(activity.id) { mutableStateOf(activity.type.orEmpty()) }
     var notes by remember(activity.id) { mutableStateOf(activity.notes.orEmpty()) }
+    var hydration by remember(activity.id) { mutableStateOf(activity.hydrationMilliliters?.toString().orEmpty()) }
     AlertDialog(
         onDismissRequest = { if (!saving) onDismiss() },
         icon = { Icon(Icons.Default.Edit, null, tint = MaterialTheme.colorScheme.primary) },
@@ -851,11 +927,12 @@ private fun EditDialog(
                 OutlinedTextField(title, { title = it }, label = { Text("Titel") })
                 OutlinedTextField(type, { type = it }, label = { Text("Typ") })
                 OutlinedTextField(notes, { notes = it }, label = { Text("Notizen") }, minLines = 4)
+                OutlinedTextField(hydration, { hydration = it }, label = { Text("Trinkmenge (ml, optional)") }, singleLine = true)
             }
         },
         confirmButton = {
             Button(
-                onClick = { onSave(title.ifBlank { null }, type.ifBlank { null }, notes.ifBlank { null }) },
+                onClick = { onSave(title.ifBlank { null }, type.ifBlank { null }, notes.ifBlank { null }, hydration.toIntOrNull()) },
                 enabled = !saving,
             ) {
                 if (saving) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)

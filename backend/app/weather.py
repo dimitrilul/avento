@@ -116,8 +116,10 @@ class OpenMeteoWeatherProvider(WeatherProvider):
         "temperature_2m",
         "apparent_temperature",
         "precipitation",
+        "rain",
         "weather_code",
         "wind_speed_10m",
+        "wind_gusts_10m",
         "wind_direction_10m",
         "relative_humidity_2m",
     ]
@@ -161,8 +163,10 @@ class OpenMeteoWeatherProvider(WeatherProvider):
             "temperature_c": value("temperature_2m"),
             "apparent_temperature_c": value("apparent_temperature"),
             "precipitation_mm": value("precipitation"),
+            "rain_mm": value("rain"),
             "weather_code": value("weather_code"),
             "wind_speed_kmh": value("wind_speed_10m"),
+            "wind_gusts_kmh": value("wind_gusts_10m"),
             "wind_direction_deg": value("wind_direction_10m"),
             "humidity_percent": value("relative_humidity_2m"),
         }

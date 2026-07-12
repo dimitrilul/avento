@@ -3,13 +3,10 @@ import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded'
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded'
-import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded'
 import DirectionsBikeRoundedIcon from '@mui/icons-material/DirectionsBikeRounded'
 import EmojiEventsRoundedIcon from '@mui/icons-material/EmojiEventsRounded'
 import FavoriteRoundedIcon from '@mui/icons-material/FavoriteRounded'
-import FlagRoundedIcon from '@mui/icons-material/FlagRounded'
 import LandscapeRoundedIcon from '@mui/icons-material/LandscapeRounded'
-import LocalFireDepartmentRoundedIcon from '@mui/icons-material/LocalFireDepartmentRounded'
 import RouteRoundedIcon from '@mui/icons-material/RouteRounded'
 import SpeedRoundedIcon from '@mui/icons-material/SpeedRounded'
 import ThermostatRoundedIcon from '@mui/icons-material/ThermostatRounded'
@@ -36,6 +33,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link as RouterLink, useNavigate, useOutletContext } from 'react-router-dom'
 import { activitiesApi, insightsApi, statisticsApi, type Activity, type StatisticsGranularity } from '../api'
 import { useAuth } from '../auth/AuthContext'
+import { GamificationOverviewCard } from '../components/gamification/GamificationOverviewCard'
 import { EmptyState, ErrorState } from '../components/States'
 import { MetricCard } from '../components/MetricCard'
 import { TrendChart } from '../components/TrendChart'
@@ -66,23 +64,6 @@ function periodRange(period: Period) {
 
 function percent(value?: number | null) {
   return value == null ? null : Number(value.toFixed(0))
-}
-
-function activityStreak(activities: Activity[]) {
-  const days = [...new Set(activities.map((activity) => dateInput(new Date(activity.started_at))))].sort().reverse()
-  if (!days.length) return 0
-  const cursor = new Date()
-  const today = dateInput(cursor)
-  cursor.setDate(cursor.getDate() - 1)
-  if (days[0] !== today && days[0] !== dateInput(cursor)) return 0
-  let streak = 0
-  const check = new Date(`${days[0]}T12:00:00`)
-  for (const day of days) {
-    if (day !== dateInput(check)) break
-    streak += 1
-    check.setDate(check.getDate() - 1)
-  }
-  return streak
 }
 
 export function DashboardPage() {
@@ -125,7 +106,6 @@ export function DashboardPage() {
   const comparison = trend.data?.comparison
   const change = (key: string) => percent(comparison?.changes[key])
   const activities = recent.data?.items ?? []
-  const streak = activityStreak(activities)
   const weeklyTargetKm = 100
   const weeklyDistanceKm = (week.data?.distance_m ?? 0) / 1000
   const weeklyProgress = Math.min(100, (weeklyDistanceKm / weeklyTargetKm) * 100)
@@ -208,8 +188,7 @@ export function DashboardPage() {
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)', xl: 'repeat(4, 1fr)' }, gap: 2 }}>
         <RecordCard records={records.data} fallback={activities.reduce<Activity | undefined>((best, activity) => !best || activity.distance_m > best.distance_m ? activity : best, undefined)} loading={records.isLoading} />
-        <StreakCard streak={streak} activityCount={activities.length} />
-        <GoalsCard goals={profile?.training_goals ?? []} />
+        <GamificationOverviewCard />
         <WeatherWidget activity={weatherActivity} />
       </Box>
 
@@ -264,14 +243,6 @@ function RecordCard({ records, fallback, loading }: { records?: Awaited<ReturnTy
   const distance = record?.distance_m ?? fallback?.distance_m
   const title = record?.title ?? fallback?.title
   return <Card sx={{ height: '100%' }}><CardContent sx={{ p: 2.25 }}><Stack direction="row" justifyContent="space-between"><Box><Typography variant="overline" color="text.secondary" fontWeight={800}>PERSÖNLICHER REKORD</Typography><Typography variant="h4">Längste Tour</Typography></Box><EmojiEventsRoundedIcon color="primary" /></Stack>{loading ? <Skeleton sx={{ mt: 2 }} /> : <><Typography variant="h3" sx={{ mt: 2, fontSize: '1.75rem' }}>{formatDistance(distance)}</Typography><Typography variant="body2" color="text.secondary" noWrap>{title ?? 'Noch kein Rekord'}</Typography></>}<Button component={RouterLink} to="/rekorde" endIcon={<ArrowForwardRoundedIcon />} sx={{ mt: 1.25, px: 0 }}>Alle Rekorde</Button></CardContent></Card>
-}
-
-function StreakCard({ streak, activityCount }: { streak: number; activityCount: number }) {
-  return <Card sx={{ height: '100%' }}><CardContent sx={{ p: 2.25 }}><Stack direction="row" justifyContent="space-between"><Box><Typography variant="overline" color="text.secondary" fontWeight={800}>TRAININGSSERIE</Typography><Typography variant="h4">Dranbleiben</Typography></Box><LocalFireDepartmentRoundedIcon sx={{ color: 'chart.coral' }} /></Stack><Stack direction="row" alignItems="baseline" gap={1} sx={{ mt: 2 }}><Typography variant="h3" sx={{ fontSize: '1.75rem' }}>{streak}</Typography><Typography color="text.secondary">{streak === 1 ? 'aktiver Tag' : 'aktive Tage'}</Typography></Stack><Typography variant="body2" color="text.secondary" sx={{ mt: .5 }}>{activityCount ? `${activityCount} letzte Aktivitäten berücksichtigt` : 'Deine nächste Fahrt startet die Serie.'}</Typography></CardContent></Card>
-}
-
-function GoalsCard({ goals }: { goals: string[] }) {
-  return <Card sx={{ height: '100%' }}><CardContent sx={{ p: 2.25 }}><Stack direction="row" justifyContent="space-between"><Box><Typography variant="overline" color="text.secondary" fontWeight={800}>NÄCHSTE ZIELE</Typography><Typography variant="h4">Dein Fokus</Typography></Box><FlagRoundedIcon color="primary" /></Stack><Stack spacing={1} sx={{ mt: 2 }}>{goals.length ? goals.slice(0, 2).map((goal) => <Stack key={goal} direction="row" gap={1} alignItems="flex-start"><Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: 'primary.main', mt: .75, flex: 'none' }} /><Typography variant="body2">{goal}</Typography></Stack>) : <Typography variant="body2" color="text.secondary">Lege im Profil Trainingsziele fest, damit dein Dashboard dich gezielt begleitet.</Typography>}</Stack><Button component={RouterLink} to="/profil" sx={{ mt: 1.25, px: 0 }}>Ziele bearbeiten</Button></CardContent></Card>
 }
 
 function WeatherWidget({ activity }: { activity?: Activity }) {

@@ -23,6 +23,7 @@ from ..analysis import (
 from ..config import get_settings
 from ..database import get_db
 from ..deps import get_current_user
+from ..gamification_ai import generate_challenge_suggestions
 from ..models import Activity, User
 from ..schemas import ChatRequest, ChatResponse, ChatSource
 from ..statistics import totals
@@ -157,6 +158,18 @@ TOOLS: list[dict[str, Any]] = [
                 "end_km": {"type": ["number", "null"], "minimum": 0},
             },
             "required": ["activity_id", "start_km", "end_km"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "suggest_gamification_challenges",
+        "description": "Erzeugt optionale private Challenges aus der bisherigen Trainingshistorie. Ohne OpenAI-Schlüssel nicht verfügbar.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": [],
             "additionalProperties": False,
         },
         "strict": True,
@@ -343,6 +356,18 @@ def _execute_tool(
             "returned_range_km": [requested_start, split_end],
             "has_more_splits": split_end < total_splits,
         }
+    if name == "suggest_gamification_challenges":
+        settings = get_settings()
+        if not settings.openai_api_key:
+            return {"available": False, "error": "KI-Challenge-Vorschläge sind ohne OpenAI-Schlüssel nicht verfügbar."}
+        activities = list(
+            db.scalars(select(Activity).where(Activity.user_id == user.id).order_by(Activity.started_at)).all()
+        )
+        try:
+            suggestions = generate_challenge_suggestions(settings, user, activities)
+        except Exception:
+            return {"available": True, "suggestions": [], "error": "Die KI konnte gerade keine sicheren Vorschläge erstellen."}
+        return {"available": True, "suggestions": suggestions}
     return {"error": "Unbekanntes Werkzeug."}
 
 
@@ -355,6 +380,13 @@ def _local_answer(
     activities = db.scalars(
         select(Activity).where(Activity.user_id == user.id).order_by(Activity.started_at.desc())
     ).all()
+    if any(word in payload.message.casefold() for word in ("challenge", "herausforderung", "gamification", "zielvorschlag")):
+        return (
+            "KI-Challenge-Vorschläge sind ohne OpenAI-Schlüssel nicht verfügbar. Du kannst jederzeit ein eigenes "
+            "privates Ziel unter Meilensteine anlegen.",
+            [],
+            [],
+        )
     if not activities:
         return "Importiere zuerst eine Aktivität, damit ich deine Entwicklung analysieren kann.", [], ["search_activities"]
     selected = _activity(db, user, payload.activity_id) if payload.activity_id else None
@@ -518,7 +550,8 @@ def chat(
         "Titel verwendeter Aktivitäten. Nutze für Superlative wie beste, schnellste oder längste Fahrt das Werkzeug "
         "find_best_activities, das die gesamte Historie durchsucht. Nutze für Kilometerwerte und Höhenprofile "
         "get_activity_track_analysis. Wenn Vergleichsdaten nur breit vergleichbar sind, leite daraus keinen "
-        "Fitnessfortschritt ab."
+        "Fitnessfortschritt ab. Wenn nach einer Challenge oder einem Zielvorschlag gefragt wird, nutze "
+        "suggest_gamification_challenges und stelle die Ergebnisse als optionale private Vorschläge dar."
     )
     try:
         response = client.responses.create(

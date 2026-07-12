@@ -1,10 +1,23 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    JSON,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -37,6 +50,26 @@ class User(Base):
 
     activities: Mapped[list["Activity"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     activity_photos: Mapped[list["ActivityPhoto"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    gamification_badges: Mapped[list["GamificationBadgeUnlock"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    gamification_goals: Mapped[list["GamificationGoal"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    gamification_challenges: Mapped[list["GamificationChallenge"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    gamification_discoveries: Mapped[list["GamificationDiscovery"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    gamification_yearly_awards: Mapped[list["GamificationYearlyAward"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
     )
@@ -163,3 +196,211 @@ class ActivityPhoto(Base):
 
     activity: Mapped[Activity] = relationship(back_populates="photos")
     user: Mapped[User] = relationship(back_populates="activity_photos")
+
+
+class GamificationBadgeUnlock(Base):
+    __tablename__ = "gamification_badge_unlocks"
+    __table_args__ = (
+        UniqueConstraint("user_id", "badge_key", name="uq_gam_badge_user_key"),
+        CheckConstraint("reward_xp >= 0 AND reward_xp <= 100000", name="ck_gam_badge_reward_xp"),
+        Index("ix_gam_badge_user_unlocked", "user_id", "unlocked_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4_str)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    badge_key: Mapped[str] = mapped_column(String(80))
+    unlocked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    source_activity_id: Mapped[str | None] = mapped_column(
+        ForeignKey("activities.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    reward_xp: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    user: Mapped[User] = relationship(back_populates="gamification_badges")
+
+
+class GamificationGoal(Base):
+    __tablename__ = "gamification_goals"
+    __table_args__ = (
+        CheckConstraint(
+            "metric IN ('distance_m', 'activity_count', 'elevation_gain_m', 'moving_time_s', "
+            "'training_load', 'active_weeks', 'places_visited', 'hydration_activity_count', "
+            "'hydration_ml', 'recovery_gap_count', 'intensity_variety', 'weather_activity_count', "
+            "'village_count', 'city_count', "
+            "'municipality_count', 'state_count', 'country_count', 'longest_ride_m', "
+            "'highest_elevation_m', 'best_average_speed_mps')",
+            name="ck_gam_goal_metric",
+        ),
+        CheckConstraint(
+            "period IN ('week', 'month', 'year', 'custom', 'lifetime')",
+            name="ck_gam_goal_period",
+        ),
+        CheckConstraint(
+            "status IN ('active', 'paused', 'completed', 'expired')",
+            name="ck_gam_goal_status",
+        ),
+        CheckConstraint("target_value > 0 AND target_value <= 1000000000000", name="ck_gam_goal_target"),
+        CheckConstraint("reward_xp >= 0 AND reward_xp <= 100000", name="ck_gam_goal_reward_xp"),
+        CheckConstraint("deadline IS NULL OR starts_on IS NULL OR deadline >= starts_on", name="ck_gam_goal_dates"),
+        Index("ix_gam_goal_user_status", "user_id", "status"),
+        Index("ix_gam_goal_user_deadline", "user_id", "deadline"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4_str)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(80))
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    metric: Mapped[str] = mapped_column(String(40))
+    target_value: Mapped[float] = mapped_column(Float)
+    period: Mapped[str] = mapped_column(String(20), default="custom")
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    starts_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    deadline: Mapped[date | None] = mapped_column(Date, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reward_xp: Mapped[int] = mapped_column(Integer, default=100)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    user: Mapped[User] = relationship(back_populates="gamification_goals")
+
+
+class GamificationChallenge(Base):
+    __tablename__ = "gamification_challenges"
+    __table_args__ = (
+        UniqueConstraint("user_id", "template_key", name="uq_gam_challenge_user_template"),
+        CheckConstraint(
+            "metric IN ('distance_m', 'activity_count', 'elevation_gain_m', 'moving_time_s', "
+            "'training_load', 'active_weeks', 'places_visited', 'hydration_activity_count', "
+            "'hydration_ml', 'recovery_gap_count', 'intensity_variety', 'weather_activity_count', "
+            "'village_count', 'city_count', "
+            "'municipality_count', 'state_count', 'country_count', 'longest_ride_m', "
+            "'highest_elevation_m', 'best_average_speed_mps')",
+            name="ck_gam_challenge_metric",
+        ),
+        CheckConstraint(
+            "status IN ('suggested', 'accepted', 'completed', 'declined', 'expired')",
+            name="ck_gam_challenge_status",
+        ),
+        CheckConstraint("source IN ('local', 'ai', 'user')", name="ck_gam_challenge_source"),
+        CheckConstraint("target_value > 0 AND target_value <= 1000000000000", name="ck_gam_challenge_target"),
+        CheckConstraint("duration_days >= 1 AND duration_days <= 366", name="ck_gam_challenge_duration"),
+        CheckConstraint("reward_xp >= 0 AND reward_xp <= 100000", name="ck_gam_challenge_reward_xp"),
+        CheckConstraint("expires_on IS NULL OR starts_on IS NULL OR expires_on >= starts_on", name="ck_gam_challenge_dates"),
+        Index("ix_gam_challenge_user_status", "user_id", "status"),
+        Index("ix_gam_challenge_user_expiry", "user_id", "expires_on"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4_str)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    template_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    title: Mapped[str] = mapped_column(String(120))
+    description: Mapped[str] = mapped_column(String(1000), default="")
+    metric: Mapped[str] = mapped_column(String(40))
+    target_value: Mapped[float] = mapped_column(Float)
+    duration_days: Mapped[int] = mapped_column(Integer, default=7)
+    reward_xp: Mapped[int] = mapped_column(Integer, default=150)
+    status: Mapped[str] = mapped_column(String(20), default="suggested")
+    source: Mapped[str] = mapped_column(String(20), default="user")
+    personalization_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    weather_sensitive: Mapped[bool] = mapped_column(Boolean, default=False)
+    safety_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    starts_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    expires_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    user: Mapped[User] = relationship(back_populates="gamification_challenges")
+
+
+class GamificationDiscovery(Base):
+    __tablename__ = "gamification_discoveries"
+    __table_args__ = (
+        UniqueConstraint("user_id", "kind", "location_key", name="uq_gam_discovery_user_place"),
+        CheckConstraint(
+            "kind IN ('village', 'city', 'municipality', 'state', 'country')",
+            name="ck_gam_discovery_kind",
+        ),
+        CheckConstraint("latitude IS NULL OR (latitude >= -90 AND latitude <= 90)", name="ck_gam_discovery_lat"),
+        CheckConstraint("longitude IS NULL OR (longitude >= -180 AND longitude <= 180)", name="ck_gam_discovery_lon"),
+        Index("ix_gam_discovery_user_kind", "user_id", "kind"),
+        Index("ix_gam_discovery_user_first", "user_id", "first_discovered_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4_str)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(20))
+    location_key: Mapped[str] = mapped_column(String(96))
+    name: Mapped[str] = mapped_column(String(200))
+    region: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    country_code: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    first_discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    first_activity_id: Mapped[str | None] = mapped_column(
+        ForeignKey("activities.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    details: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    user: Mapped[User] = relationship(back_populates="gamification_discoveries")
+    activity_links: Mapped[list["GamificationActivityDiscovery"]] = relationship(
+        back_populates="discovery",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class GamificationActivityDiscovery(Base):
+    __tablename__ = "gamification_activity_discoveries"
+    __table_args__ = (
+        UniqueConstraint("activity_id", "discovery_id", name="uq_gam_activity_discovery"),
+        Index("ix_gam_actdisc_user_activity", "user_id", "activity_id"),
+        Index("ix_gam_actdisc_user_discovery", "user_id", "discovery_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4_str)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    activity_id: Mapped[str] = mapped_column(ForeignKey("activities.id", ondelete="CASCADE"), index=True)
+    discovery_id: Mapped[str] = mapped_column(
+        ForeignKey("gamification_discoveries.id", ondelete="CASCADE"),
+        index=True,
+    )
+    discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    discovery: Mapped[GamificationDiscovery] = relationship(back_populates="activity_links")
+
+
+class GamificationYearlyAward(Base):
+    __tablename__ = "gamification_yearly_awards"
+    __table_args__ = (
+        UniqueConstraint("user_id", "year", "award_key", name="uq_gam_award_user_year_key"),
+        CheckConstraint("year >= 1900 AND year <= 9999", name="ck_gam_award_year"),
+        CheckConstraint("value IS NULL OR value >= 0", name="ck_gam_award_value"),
+        CheckConstraint("reward_xp >= 0 AND reward_xp <= 100000", name="ck_gam_award_reward_xp"),
+        Index("ix_gam_award_user_year", "user_id", "year"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4_str)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    year: Mapped[int] = mapped_column(Integer)
+    award_key: Mapped[str] = mapped_column(String(80))
+    title: Mapped[str] = mapped_column(String(160))
+    description: Mapped[str] = mapped_column(String(1000))
+    value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    unit: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    tier: Mapped[str] = mapped_column(String(20), default="personal")
+    icon: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    is_final: Mapped[bool] = mapped_column(Boolean, default=False)
+    earned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reward_xp: Mapped[int] = mapped_column(Integer, default=0)
+    details: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    user: Mapped[User] = relationship(back_populates="gamification_yearly_awards")

@@ -512,6 +512,213 @@ export interface McpAuditEvent {
   created_at: string
 }
 
+export type GamificationMetric =
+  | 'distance_m'
+  | 'activity_count'
+  | 'elevation_gain_m'
+  | 'moving_time_s'
+  | 'places_visited'
+  | 'custom'
+  | string
+
+export type GamificationPeriod = 'week' | 'month' | 'year' | 'custom' | string
+export type GamificationGoalStatus = 'active' | 'completed' | 'paused' | string
+export type GamificationChallengeStatus = 'suggested' | 'accepted' | 'completed' | 'declined' | 'expired' | string
+export type GamificationDiscoveryScope = 'village' | 'municipality' | 'state' | 'country' | string
+
+export interface GamificationLevel {
+  level: number
+  name: string
+  total_xp: number
+  current_xp: number
+  next_level_xp: number
+  progress_percent: number
+  breakdown: Record<string, number>
+}
+
+export interface GamificationGoal {
+  id: string
+  title: string
+  description: string | null
+  metric: GamificationMetric
+  current_value: number
+  target_value: number
+  unit: string
+  period: GamificationPeriod
+  progress_percent: number
+  remaining_value: number
+  status: GamificationGoalStatus
+  starts_at: string | null
+  deadline: string | null
+  completed_at: string | null
+  reward_xp: number
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface GamificationGoalInput {
+  title: string
+  description?: string | null
+  metric: GamificationMetric
+  target_value: number
+  period: GamificationPeriod
+  starts_at?: string | null
+  deadline?: string | null
+}
+
+export type GamificationGoalUpdate = Partial<GamificationGoalInput> & { status?: 'active' | 'paused' }
+
+export interface GamificationChallenge {
+  id: string
+  title: string
+  description: string
+  metric: GamificationMetric
+  current_value: number
+  target_value: number
+  unit: string
+  progress_percent: number
+  remaining_value: number
+  duration_days: number
+  reward_xp: number
+  status: GamificationChallengeStatus
+  source: string
+  ai_generated: boolean
+  personalization_reason: string | null
+  weather_sensitive: boolean
+  safety_note: string | null
+  starts_at: string | null
+  expires_at: string | null
+  accepted_at: string | null
+  completed_at: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface GamificationBadge {
+  id: string
+  key: string
+  name: string
+  description: string
+  category: string
+  tier: string
+  icon: string | null
+  reward_xp: number
+  unlocked: boolean
+  unlocked_at: string | null
+  source_activity_id: string | null
+  current_value: number
+  target_value: number
+  unit: string
+  progress_percent: number
+}
+
+export interface GamificationStreak {
+  current_weeks: number
+  best_weeks: number
+  weekly_target: number
+  current_week_progress: number
+  pause_protection_available: boolean
+  pause_protection_active: boolean
+  protected_until: string | null
+  next_check_at: string | null
+  active_week_starts: string[]
+  method: string
+}
+
+export interface GamificationRecordChase {
+  id: string
+  title: string
+  description: string
+  metric: GamificationMetric
+  current_value: number
+  target_value: number
+  unit: string
+  progress_percent: number
+  activity_id: string | null
+  achieved: boolean
+}
+
+export interface GamificationDiscovery {
+  scope: GamificationDiscoveryScope
+  label: string
+  count: number
+  total_available: number | null
+  progress_percent: number | null
+  places: string[]
+}
+
+export interface GamificationAnnualAward {
+  id: string
+  key: string
+  year: number
+  title: string
+  description: string
+  value: number | null
+  unit: string | null
+  tier: string
+  earned: boolean
+  earned_at: string | null
+  icon: string | null
+  reward_xp: number
+  is_final: boolean
+}
+
+export interface GamificationDiscoveryItem {
+  id: string
+  kind: GamificationDiscoveryScope
+  name: string
+  region: string | null
+  country_code: string | null
+  latitude: number | null
+  longitude: number | null
+  first_discovered_at: string
+  first_activity_id: string | null
+}
+
+export interface GamificationGoalListResponse {
+  items: GamificationGoal[]
+  total: number
+}
+
+export interface GamificationChallengeListResponse {
+  items: GamificationChallenge[]
+  total: number
+  ai_challenges_available: boolean
+}
+
+export interface GamificationBadgeListResponse {
+  items: GamificationBadge[]
+  total: number
+  unlocked: number
+}
+
+export interface GamificationDiscoveryListResponse {
+  items: GamificationDiscoveryItem[]
+  total: number
+  by_scope: GamificationDiscovery[]
+}
+
+export interface GamificationAnnualAwardListResponse {
+  items: GamificationAnnualAward[]
+  total: number
+  years: number[]
+}
+
+export interface GamificationOverview {
+  generated_at: string | null
+  privacy: 'private' | string
+  level: GamificationLevel
+  goals: GamificationGoal[]
+  active_challenges: GamificationChallenge[]
+  challenge_suggestions: GamificationChallenge[]
+  ai_challenges_available: boolean
+  badges: GamificationBadge[]
+  streak: GamificationStreak
+  record_chases: GamificationRecordChase[]
+  discoveries: GamificationDiscovery[]
+  annual_awards: GamificationAnnualAward[]
+}
+
 export interface ApiErrorBody {
   detail?: string | Array<{ msg?: string; loc?: Array<string | number> }>
   message?: string

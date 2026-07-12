@@ -30,6 +30,7 @@ from ..analysis import (
 from ..config import get_settings
 from ..database import get_db
 from ..deps import get_current_user
+from ..geography import reverse_geocode_track
 from ..models import Activity, ActivityPhoto, User, utcnow
 from ..photo_storage import (
     finalize_staged_photo_deletions,
@@ -50,6 +51,7 @@ from ..schemas import (
 from ..statistics import build_statistics
 from ..tcx import ParsedActivity, TcxError, parse_tcx
 from ..weather import get_weather_provider
+from ..weather_classification import classify_route_weather
 
 
 router = APIRouter(tags=["Aktivitäten"])
@@ -164,6 +166,19 @@ def _refresh_weather(activity: Activity) -> None:
             ]
         if activity.weather and wind:
             activity.weather["route_wind"] = wind
+        if activity.weather:
+            weather_samples = (activity.weather or {}).get("route_weather_samples") or route_samples or [activity.weather]
+            try:
+                activity.weather["route_weather_classification"] = classify_route_weather(weather_samples)
+            except Exception:
+                pass
+            if not (activity.weather or {}).get("route_places"):
+                try:
+                    places = reverse_geocode_track(activity.track_points or [], settings)
+                except Exception:
+                    places = []
+                if places:
+                    activity.weather["route_places"] = places
         activity.weather_status = "available" if activity.weather else "unavailable"
     except Exception:
         activity.weather = None

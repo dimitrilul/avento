@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import de.avento.app.data.AventoRepository
 import de.avento.app.data.model.Activity
 import de.avento.app.data.model.ActivityTrack
+import de.avento.app.data.model.ActivityPhoto
 import de.avento.app.data.model.SummaryResponse
 import de.avento.app.data.model.WeatherResponse
 import kotlinx.coroutines.async
@@ -20,10 +21,12 @@ data class DetailUiState(
     val saving: Boolean = false,
     val refreshingWeather: Boolean = false,
     val generatingSummary: Boolean = false,
+    val uploadingPhoto: Boolean = false,
     val activity: Activity? = null,
     val track: ActivityTrack? = null,
     val weather: WeatherResponse? = null,
     val summary: SummaryResponse? = null,
+    val photos: List<ActivityPhoto> = emptyList(),
     val error: String? = null,
     val message: String? = null,
 )
@@ -47,7 +50,8 @@ class DetailViewModel(
                     val track = async { runCatching { repository.track(activityId) }.getOrNull() }
                     val weather = async { runCatching { repository.weather(activityId) }.getOrNull() }
                     val summary = async { runCatching { repository.summary(activityId) }.getOrNull() }
-                    Loaded(activity.await(), track.await(), weather.await(), summary.await())
+                    val photos = async { runCatching { repository.activityPhotos(activityId) }.getOrNull()?.items.orEmpty() }
+                    Loaded(activity.await(), track.await(), weather.await(), summary.await(), photos.await())
                 }
             }.onSuccess { loaded ->
                 _state.update {
@@ -57,6 +61,7 @@ class DetailViewModel(
                         track = loaded.track,
                         weather = loaded.weather,
                         summary = loaded.summary,
+                        photos = loaded.photos,
                     )
                 }
             }.onFailure { failure ->
@@ -79,9 +84,37 @@ class DetailViewModel(
         failure = { copy(generatingSummary = false, error = errorMessage(it)) },
     )
 
-    fun save(title: String?, type: String?, notes: String?, onSaved: () -> Unit) = launchAction(
+    fun reanalyze() = launchAction(
         start = { copy(saving = true, error = null) },
-        block = { repository.updateActivity(activityId, title, type, notes) },
+        block = { repository.reanalyzeActivity(activityId) },
+        success = { activity -> copy(saving = false, activity = activity, message = "Aktivität wurde neu analysiert.") },
+        failure = { copy(saving = false, error = errorMessage(it)) },
+    )
+
+    fun uploadPhoto(bytes: ByteArray, fileName: String, contentType: String, caption: String? = null) {
+        if (_state.value.uploadingPhoto) return
+        viewModelScope.launch {
+            _state.update { it.copy(uploadingPhoto = true, error = null) }
+            runCatching { repository.uploadActivityPhoto(activityId, bytes, fileName, contentType, caption) }
+                .onSuccess { photo -> _state.update { it.copy(uploadingPhoto = false, photos = it.photos + photo, message = "Foto gespeichert.") } }
+                .onFailure { failure -> _state.update { it.copy(uploadingPhoto = false, error = errorMessage(failure)) } }
+        }
+    }
+
+    fun deletePhoto(photo: ActivityPhoto) {
+        viewModelScope.launch {
+            _state.update { it.copy(saving = true, error = null) }
+            runCatching { repository.deleteActivityPhoto(activityId, photo.id) }
+                .onSuccess { _state.update { it.copy(saving = false, photos = it.photos.filterNot { item -> item.id == photo.id }, message = "Foto gelöscht.") } }
+                .onFailure { failure -> _state.update { it.copy(saving = false, error = errorMessage(failure)) } }
+        }
+    }
+
+    suspend fun photoBytes(photo: ActivityPhoto): ByteArray = repository.activityPhotoBytes(photo)
+
+    fun save(title: String?, type: String?, notes: String?, hydrationMilliliters: Int?, onSaved: () -> Unit) = launchAction(
+        start = { copy(saving = true, error = null) },
+        block = { repository.updateActivity(activityId, title, type, notes, hydrationMilliliters) },
         success = { activity -> copy(saving = false, activity = activity, message = "Aktivität gespeichert.") },
         failure = { copy(saving = false, error = errorMessage(it)) },
         afterSuccess = onSaved,
@@ -124,5 +157,6 @@ class DetailViewModel(
         val track: ActivityTrack?,
         val weather: WeatherResponse?,
         val summary: SummaryResponse?,
+        val photos: List<ActivityPhoto>,
     )
 }

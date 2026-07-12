@@ -163,4 +163,5 @@ export const chatApi = {
 }
 
 export { activityPhotosApi, insightsApi, mcpAdminApi } from './roadmap'
+export { gamificationApi, gamificationEndpoints, gamificationOverviewQueryKey } from './gamification'
 export type * from './types'
