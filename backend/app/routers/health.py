@@ -86,7 +86,6 @@ def start_google_health_oauth(
         authorization_url = client.authorization_url(
             state=state_value,
             code_challenge=challenge,
-            force_consent=force_consent,
         )
     except GoogleHealthError as exc:
         raise HTTPException(status_code=exc.status_code, detail="Google Health ist nicht konfiguriert.") from None
