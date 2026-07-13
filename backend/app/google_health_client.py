@@ -51,6 +51,7 @@ class GoogleHealthClient:
         *,
         state: str,
         code_challenge: str,
+        force_consent: bool = False,
     ) -> str:
         self._require_oauth_configuration()
         params = {
@@ -58,13 +59,14 @@ class GoogleHealthClient:
             "redirect_uri": self.settings.google_health_redirect_uri or "",
             "response_type": "code",
             "access_type": "offline",
-            "prompt": "consent",
             "include_granted_scopes": "true",
             "scope": " ".join(GOOGLE_HEALTH_SCOPES),
             "state": state,
             "code_challenge": code_challenge,
             "code_challenge_method": "S256",
         }
+        if force_consent:
+            params["prompt"] = "consent"
         return f"{self.settings.google_health_authorization_url}?{urlencode(params)}"
 
     def exchange_code(self, *, code: str, code_verifier: str, redirect_uri: str) -> dict[str, Any]:
@@ -314,8 +316,8 @@ class GoogleHealthClient:
 class MockGoogleHealthClient(GoogleHealthClient):
     """Deterministic local provider; it never contacts Google."""
 
-    def authorization_url(self, *, state: str, code_challenge: str) -> str:
-        del code_challenge
+    def authorization_url(self, *, state: str, code_challenge: str, force_consent: bool = False) -> str:
+        del code_challenge, force_consent
         redirect = self.settings.google_health_redirect_uri
         if not redirect:
             raise GoogleHealthError("google_health_redirect_not_configured", status_code=503)
