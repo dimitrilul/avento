@@ -33,9 +33,6 @@ optional durch einen persönlichen KI-Coach ausgewertet.
 | --- | --- | --- | --- |
 | Interaktive Karten, Diagramme und Trackanalyse | Persönliche Rekorde, Trends und Vergleiche | Historisches Wetter, Trinkmenge und Aktivitätsfotos | Self-hosted, Passkeys, OAuth 2.1 und Read-only-MCP |
 
-> [!NOTE]
-> Dieses Projekt ist zu 100 % gevibecodet.
-
 ## Highlights
 
 - **Persönliche Rekorde:** Bestzeiten über 10, 20, 30, 40 und 50 km werden
