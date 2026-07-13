@@ -1,90 +1,114 @@
-# Avento
+<p align="center">
+  <img src="docs/assets/avento-logo-banner.png" alt="Avento – Radfahranalyse" width="720">
+</p>
+
+<p align="center">
+  <strong>Deine Fahrten. Deine Daten. Dein Fortschritt.</strong><br>
+  Private Radfahranalyse mit Strecken, Wetter, persönlichen Rekorden und optionalem KI-Coach.
+</p>
+
+<p align="center">
+  <img alt="Python 3.11+" src="https://img.shields.io/badge/Python-3.11%2B-0E6562?style=flat-square&logo=python&logoColor=white">
+  <img alt="React 19" src="https://img.shields.io/badge/React-19-0E6562?style=flat-square&logo=react&logoColor=white">
+  <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-Android-A5C838?style=flat-square&logo=kotlin&logoColor=white">
+  <img alt="Docker Compose" src="https://img.shields.io/badge/Docker-Compose-A5C838?style=flat-square&logo=docker&logoColor=white">
+</p>
+
+<p align="center">
+  <img src="docs/assets/avento-login.jpg" alt="Avento Web-App mit Anmeldung und Produktübersicht" width="100%">
+</p>
+
+<p align="center"><sub>Eine responsive Web-App und eine native Android-App greifen auf dasselbe FastAPI-Backend zu.</sub></p>
+
+---
+
+## Was ist Avento?
 
 Avento ist eine private Full-Stack-Plattform für Radfahranalyse und
-Streckenvisualisierung. Eine native Android-App und eine responsive Web-App
-greifen auf dasselbe FastAPI-Backend zu. Importierte TCX-Dateien werden
-serverseitig gespeichert, analysiert, entlang der Strecke mit historischen Wetterdaten angereichert
-und optional durch einen persönlichen KI-Coach ausgewertet.
+Streckenvisualisierung. Importierte TCX-Dateien werden serverseitig gespeichert,
+analysiert, entlang der Strecke mit historischen Wetterdaten angereichert und
+optional durch einen persönlichen KI-Coach ausgewertet.
 
-> Hinweis: Dieses Projekt ist zu 100 % gevibecodet.
+| Strecke & Leistung | Training & Fortschritt | Kontext & Erinnerungen | Privat & erweiterbar |
+| --- | --- | --- | --- |
+| Interaktive Karten, Diagramme und Trackanalyse | Persönliche Rekorde, Trends und Vergleiche | Historisches Wetter, Trinkmenge und Aktivitätsfotos | Self-hosted, Passkeys, OAuth 2.1 und Read-only-MCP |
 
-## Komponenten
+> [!NOTE]
+> Dieses Projekt ist zu 100 % gevibecodet.
 
-- `backend/`: FastAPI, SQLAlchemy, PostgreSQL, TCX-Analyse, Open-Meteo, OpenAI und Read-only-MCP
-- `web/`: React, TypeScript, Material UI, MapLibre und Recharts
-- `android/`: Kotlin, Jetpack Compose und Material 3
-- `infra/`: Caddy als TLS-fähiger Reverse Proxy
+## Highlights
 
-## Produktiver Start mit Docker
+- **Persönliche Rekorde:** Bestzeiten über 10, 20, 30, 40 und 50 km werden
+  direkt aus den Trackpunkten berechnet.
+- **Langzeittrends:** Monats- und Jahresvergleiche, Saisonrückblicke sowie
+  vorsichtig formulierte Muster zu Wetter, Herzfrequenz, Tempo und
+  Aktivitätsabständen.
+- **Aktivitätskontext:** Trinkmengen und Fotos lassen sich dokumentieren; Fotos
+  werden validiert, als WebP gespeichert und über Aufnahmezeit sowie
+  Koordinaten einer Strecke zugeordnet.
+- **Nachvollziehbare KI:** Coach-Antworten und KI-Zusammenfassungen nennen
+  Zeitraum, Aktivitäten, Kennzahlen, Methoden und bekannte Einschränkungen.
+- **Ein gemeinsames Backend:** Web-App, Android-App und MCP verwenden dieselben
+  Daten und dieselbe API.
 
-Voraussetzungen sind Docker mit Compose sowie eine Domain oder `localhost` für
+## Architektur
+
+```mermaid
+flowchart LR
+    Web["Web-App<br>React · TypeScript · MUI"]
+    Android["Android-App<br>Kotlin · Jetpack Compose"]
+    MCP["MCP-Clients<br>OAuth 2.1 · Read-only"]
+    Gateway["Caddy<br>TLS · Reverse Proxy"]
+    API["FastAPI<br>Analyse · Auth · KI"]
+    DB[("PostgreSQL")]
+    Files[("TCX · Fotos")]
+    Weather["Open-Meteo"]
+    AI["OpenAI<br>optional"]
+
+    Web --> Gateway
+    Android --> Gateway
+    MCP --> Gateway
+    Gateway --> API
+    API --> DB
+    API --> Files
+    API --> Weather
+    API -. optional .-> AI
+```
+
+| Verzeichnis | Inhalt |
+| --- | --- |
+| [`backend/`](backend/) | FastAPI, SQLAlchemy, PostgreSQL, TCX-Analyse, Open-Meteo, OpenAI und Read-only-MCP |
+| [`web/`](web/) | React, TypeScript, Material UI, MapLibre und Recharts |
+| [`android/`](android/) | Kotlin, Jetpack Compose und Material 3 |
+| [`infra/`](infra/) | Caddy als TLS-fähiger Reverse Proxy |
+
+## Schnellstart mit Docker
+
+Vorausgesetzt werden Docker mit Compose sowie eine Domain oder `localhost` für
 den ersten Test.
 
 ```bash
 cp .env.example .env
+
 # POSTGRES_PASSWORD, SECRET_KEY, BOOTSTRAP_INVITE_CODE und PUBLIC_URL setzen.
-# POSTGRES_PASSWORD bitte als langen zufälligen alphanumerischen Wert wählen.
-newgrp docker
+# Für POSTGRES_PASSWORD einen langen, zufälligen alphanumerischen Wert verwenden.
+
 docker compose up --build -d
 ```
 
-Anschließend ist Avento unter `PUBLIC_URL` erreichbar. Der in
-`BOOTSTRAP_INVITE_CODE` konfigurierte Code ermöglicht die Erstellung des ersten
-Administratorkontos. Ohne `OPENAI_API_KEY` wird eine lokale, regelbasierte
-Zusammenfassung erzeugt; die restliche App bleibt vollständig nutzbar.
+Danach ist Avento unter der in `PUBLIC_URL` gesetzten Adresse erreichbar. Mit
+dem `BOOTSTRAP_INVITE_CODE` wird das erste Administratorkonto erstellt.
 
-## Analyse, Fotos und Rekorde
+Ohne `OPENAI_API_KEY` erzeugt Avento eine lokale, regelbasierte
+Zusammenfassung; alle übrigen Funktionen bleiben vollständig nutzbar.
 
-Avento berechnet persönliche 10-, 20-, 30-, 40- und 50-km-Rekorde direkt aus
-den Trackpunkten. Hinzu kommen Langzeittrends, Monats- und Jahresvergleiche,
-vorsichtig formulierte Muster zu Wetter, Herzfrequenz, Tempo und
-Aktivitätsabständen sowie Saison- und Jahresrückblicke. Trinkmengen können pro
-Aktivität dokumentiert werden. Aktivitätsfotos werden validiert, als WebP
-gespeichert und optional über Aufnahmezeit und Koordinaten der Strecke
-zugeordnet.
+Eine kleine TCX-Beispieldatei zum Ausprobieren liegt unter
+[`examples/sample-ride.tcx`](examples/sample-ride.tcx).
 
-Jede Coach-Antwort und KI-Zusammenfassung liefert eine strukturierte
-Datengrundlage mit Zeitraum, Aktivitäten, Kennzahlen, Methoden und bekannten
-Einschränkungen.
+## Lokale Entwicklung
 
-## Read-only-MCP
-
-Der Read-only-MCP unterstützt für entfernte HTTP-Clients jetzt OAuth 2.1 mit
-Authorization Code, PKCE und automatisch rotierenden Refresh-Tokens. MCP-
-Clients entdecken die Endpunkte über die OAuth-Metadaten und registrieren sich
-bei Bedarf dynamisch; ein manuell kopiertes Client-Secret ist nicht mehr nötig.
-Beim ersten Verbinden öffnet sich der Avento-Login mit einer Scope-Freigabe.
-
-Der Streamable-HTTP-Endpunkt lautet `/api/v1/mcp/rpc`. Die Protected-Resource-
-Metadaten liegen unter `/.well-known/oauth-protected-resource`; die OAuth-
-Server-Metadaten liegen unter `/.well-known/oauth-authorization-server`.
-`PUBLIC_URL` muss deshalb auf die von MCP-Clients erreichbare HTTPS-Adresse
-zeigen. Für abweichende Setups kann `MCP_RESOURCE_URI` gesetzt werden.
-
-Der bisherige Secret-Flow bleibt als Übergang für bereits eingerichtete Clients
-erhalten. Administratoren verwalten diese Legacy-Clients weiterhin unter
-`/administration/mcp`; ihre Secrets und Tokens werden ausschließlich gehasht
-gespeichert und jede MCP-Anfrage landet ohne Roh-Tokens oder Secrets im
-Audit-Log.
-
-Der Streamable-HTTP-Endpunkt lautet `/api/v1/mcp/rpc`. Codex kann ihn
-beispielsweise mit einem Token aus einer Umgebungsvariable verwenden:
-
-```toml
-[mcp_servers.avento]
-url = "http://localhost/api/v1/mcp/rpc"
-# OAuth-fähige MCP-Clients starten die Anmeldung automatisch.
-# Für einen Legacy-Client bleibt bearer_token_env_var möglich.
-```
-
-Für einen ausschließlich lokal erreichbaren MCP-Prozess kann im
-Backend-Verzeichnis zusätzlich `python mcp_server.py` gestartet werden. Er
-bindet standardmäßig an `127.0.0.1:8765`. Andere Streamable-HTTP-fähige
-MCP-Clients verwenden denselben Endpunkt und Bearer-Token.
-
-## Entwicklung
-
-Backend:
+<details>
+<summary><strong>Backend starten</strong></summary>
 
 ```bash
 cd backend
@@ -95,7 +119,10 @@ cp .env.example .env
 uvicorn app.main:app --reload
 ```
 
-Web-App:
+</details>
+
+<details>
+<summary><strong>Web-App starten</strong></summary>
 
 ```bash
 cd web
@@ -103,23 +130,54 @@ npm install
 npm run dev
 ```
 
-Android:
+</details>
+
+<details>
+<summary><strong>Android-App bauen</strong></summary>
 
 ```bash
 cd android
 ./gradlew testDebugUnitTest assembleDebug
 ```
 
-Beim ersten Start fragt die App nach der Adresse des Avento-Servers.
+Beim ersten Start fragt die App nach der Adresse des Avento-Servers. Die
+erzeugte Debug-APK liegt unter
+`android/app/build/outputs/apk/debug/app-debug.apk`. Weitere Hinweise stehen in
+[`android/README.md`](android/README.md).
 
-Die erzeugte Debug-APK liegt nach dem Build unter
-`android/app/build/outputs/apk/debug/app-debug.apk`. Weitere Android-Hinweise
-stehen in [`android/README.md`](android/README.md).
+</details>
 
-Eine kleine TCX-Beispieldatei zum Ausprobieren liegt unter
-[`examples/sample-ride.tcx`](examples/sample-ride.tcx).
+## Read-only-MCP
 
-## Qualität und Betrieb
+Avento stellt seine Trainingsdaten über einen schreibgeschützten
+Streamable-HTTP-Endpunkt bereit. Entfernte MCP-Clients verwenden OAuth 2.1 mit
+Authorization Code, PKCE und automatisch rotierenden Refresh-Tokens. Beim
+ersten Verbinden öffnet sich der Avento-Login mit einer Scope-Freigabe.
+
+```toml
+[mcp_servers.avento]
+url = "https://deine-avento-domain.example/api/v1/mcp/rpc"
+```
+
+| Endpunkt | Zweck |
+| --- | --- |
+| `/api/v1/mcp/rpc` | Streamable HTTP für MCP-Clients |
+| `/.well-known/oauth-protected-resource` | Protected-Resource-Metadaten |
+| `/.well-known/oauth-authorization-server` | OAuth-Server-Metadaten |
+
+`PUBLIC_URL` muss auf die vom MCP-Client erreichbare HTTPS-Adresse zeigen. Für
+abweichende Setups kann `MCP_RESOURCE_URI` gesetzt werden.
+
+Der bisherige Secret-Flow bleibt für bereits eingerichtete Clients erhalten.
+Administratoren verwalten diese Legacy-Clients unter `/administration/mcp`;
+Secrets und Tokens werden ausschließlich gehasht gespeichert. Jede
+MCP-Anfrage wird ohne Roh-Tokens oder Secrets im Audit-Log erfasst.
+
+Für einen ausschließlich lokal erreichbaren MCP-Prozess kann im
+Backend-Verzeichnis zusätzlich `python mcp_server.py` gestartet werden. Er
+bindet standardmäßig an `127.0.0.1:8765`.
+
+## Qualität, Backup und Restore
 
 ```bash
 make test
@@ -127,12 +185,12 @@ make backup
 ```
 
 Uploads und PostgreSQL-Daten liegen in Docker-Volumes. `scripts/backup.sh`
-sichert Datenbank, originale TCX-Dateien und Aktivitätsfotos im lokalen Verzeichnis `backups/`.
-API-Schlüssel, Passwörter und Token gehören ausschließlich in `.env` und niemals
-ins Repository.
+sichert die Datenbank, originale TCX-Dateien und Aktivitätsfotos im lokalen
+Verzeichnis `backups/`. API-Schlüssel, Passwörter und Tokens gehören
+ausschließlich in `.env` und niemals ins Repository.
 
-Ein vollständiges Restore wird mit beiden Backup-Dateien gestartet. Dabei werden
-die aktuelle Datenbank und das Upload-Volume überschrieben:
+Ein vollständiges Restore überschreibt die aktuelle Datenbank und das
+Upload-Volume:
 
 ```bash
 make restore BACKUP_DB=backups/avento-<zeitstempel>.dump \
