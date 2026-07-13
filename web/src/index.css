@@ -24,7 +24,7 @@ a { color: inherit; }
 button, input, textarea { font: inherit; }
 
 .maplibregl-map { font-family: 'Manrope Variable', system-ui, sans-serif; }
-.maplibregl-ctrl-group { border-radius: 8px !important; overflow: hidden; }
+.maplibregl-ctrl-group { border-radius: 12px !important; overflow: hidden; }
 
 @media print {
   .no-print { display: none !important; }

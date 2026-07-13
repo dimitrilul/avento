@@ -6,10 +6,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from . import health_models, mcp_models, models  # noqa: F401 - registers SQLAlchemy metadata
+from . import mcp_models, models  # noqa: F401 - registers SQLAlchemy metadata
 from .config import get_settings
 from .database import Base, SessionLocal, engine
-from .routers import activities, activity_photos, auth, chat, gamification, health, insights, mcp, profile
+from .routers import activities, activity_photos, auth, chat, gamification, insights, mcp, profile
 
 
 settings = get_settings()
@@ -21,10 +21,6 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("AVENTO_SECRET_KEY muss in Produktion gesetzt werden.")
     if settings.environment.lower() == "production" and not settings.bootstrap_invite_code:
         raise RuntimeError("AVENTO_BOOTSTRAP_INVITE_CODE muss in Produktion gesetzt werden.")
-    if settings.environment.lower() == "production" and settings.google_health_mock_mode:
-        raise RuntimeError("AVENTO_GOOGLE_HEALTH_MOCK_MODE darf in Produktion nicht aktiv sein.")
-    if settings.google_health_enabled and not settings.google_health_token_encryption_key:
-        raise RuntimeError("AVENTO_GOOGLE_HEALTH_TOKEN_ENCRYPTION_KEY muss gesetzt werden.")
     settings.upload_dir.mkdir(parents=True, exist_ok=True)
     if settings.auto_create_schema:
         Base.metadata.create_all(bind=engine)
@@ -52,7 +48,6 @@ app.include_router(activity_photos.router, prefix="/api/v1")
 app.include_router(insights.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
 app.include_router(gamification.router, prefix="/api/v1")
-app.include_router(health.router, prefix="/api/v1")
 app.include_router(mcp.router)
 
 

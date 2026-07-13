@@ -18,12 +18,6 @@ import de.avento.app.data.model.GamificationChallenge
 import de.avento.app.data.model.GamificationGoal
 import de.avento.app.data.model.GamificationGoalRequest
 import de.avento.app.data.model.GamificationOverview
-import de.avento.app.data.model.HealthConnectionStatus
-import de.avento.app.data.model.HealthData
-import de.avento.app.data.model.HealthOAuthStart
-import de.avento.app.data.model.HealthOverview
-import de.avento.app.data.model.HealthSyncRequest
-import de.avento.app.data.model.HealthSyncResult
 import de.avento.app.data.model.LoginRequest
 import de.avento.app.data.model.LongTermInsights
 import de.avento.app.data.model.OverviewStatistics
@@ -120,13 +114,6 @@ interface AventoRepository {
     suspend fun deleteGamificationGoal(id: String) { error("Ziele werden von diesem Repository nicht unterstützt.") }
     suspend fun acceptGamificationChallenge(id: String): GamificationChallenge = error("Herausforderungen werden von diesem Repository nicht unterstützt.")
     suspend fun declineGamificationChallenge(id: String): GamificationChallenge = error("Herausforderungen werden von diesem Repository nicht unterstützt.")
-
-    suspend fun healthConnection(): HealthConnectionStatus = error("Google Health wird von diesem Repository nicht unterstützt.")
-    suspend fun startHealthOAuth(forceConsent: Boolean = false): HealthOAuthStart = error("Google Health wird von diesem Repository nicht unterstützt.")
-    suspend fun syncHealth(lookbackDays: Int? = null): HealthSyncResult = error("Google Health wird von diesem Repository nicht unterstützt.")
-    suspend fun healthData(dateFrom: String? = null, dateTo: String? = null): HealthData = error("Google Health wird von diesem Repository nicht unterstützt.")
-    suspend fun healthScores(day: String? = null): HealthOverview = error("Google Health wird von diesem Repository nicht unterstützt.")
-    suspend fun disconnectHealth() { error("Google Health wird von diesem Repository nicht unterstützt.") }
 }
 
 class DefaultAventoRepository(
@@ -376,29 +363,6 @@ class DefaultAventoRepository(
 
     override suspend fun declineGamificationChallenge(id: String): GamificationChallenge =
         api.declineGamificationChallenge(id)
-
-    override suspend fun healthConnection(): HealthConnectionStatus = api.healthConnection()
-
-    override suspend fun startHealthOAuth(forceConsent: Boolean): HealthOAuthStart =
-        api.startHealthOAuth(forceConsent)
-
-    override suspend fun syncHealth(lookbackDays: Int?): HealthSyncResult {
-        require(lookbackDays == null || lookbackDays in 1..365) {
-            "Der Synchronisationszeitraum muss zwischen 1 und 365 Tagen liegen."
-        }
-        return api.syncHealth(HealthSyncRequest(lookbackDays))
-    }
-
-    override suspend fun healthData(dateFrom: String?, dateTo: String?): HealthData =
-        api.healthData(dateFrom.clean(), dateTo.clean())
-
-    override suspend fun healthScores(day: String?): HealthOverview =
-        api.healthScores(day.clean())
-
-    override suspend fun disconnectHealth() {
-        val response = api.disconnectHealth()
-        if (!response.isSuccessful) throw HttpException(response)
-    }
 
     private suspend fun de.avento.app.data.model.TokenResponse.save() {
         tokenStore.save(accessToken, refreshToken)

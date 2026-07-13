@@ -15,19 +15,6 @@ und optional durch einen persönlichen KI-Coach ausgewertet.
 - `android/`: Kotlin, Jetpack Compose und Material 3
 - `infra/`: Caddy als TLS-fähiger Reverse Proxy
 
-## Google Health API
-
-Avento kann Fitness-, Schlaf- und Recovery-Daten read-only aus der
-cloudbasierten Google Health API v4 synchronisieren. OAuth-Tokens verbleiben
-verschlüsselt im Backend; Web- und Android-App erhalten ausschließlich
-normalisierte Avento-Daten und den Verbindungsstatus. Health Connect und die
-alte Google-Fit-API sind nicht Bestandteil dieser Integration.
-
-Die lokale Einrichtung, Restricted Scopes, Testnutzer, Verifizierung und CASA
-sind im [Google-Health-Einrichtungsleitfaden](docs/GOOGLE_HEALTH_SETUP_DE.md)
-beschrieben. Das zugehörige Datenfluss-, Lösch- und Sicherheitskonzept steht in
-[Datenschutz und Sicherheit](docs/HEALTH_PRIVACY_SECURITY.md).
-
 ## Produktiver Start mit Docker
 
 Voraussetzungen sind Docker mit Compose sowie eine Domain oder `localhost` für

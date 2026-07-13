@@ -7,7 +7,6 @@ import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded'
 import DirectionsBikeRoundedIcon from '@mui/icons-material/DirectionsBikeRounded'
 import EmojiEventsRoundedIcon from '@mui/icons-material/EmojiEventsRounded'
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded'
-import MonitorHeartRoundedIcon from '@mui/icons-material/MonitorHeartRounded'
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded'
 import SmartToyRoundedIcon from '@mui/icons-material/SmartToyRounded'
 import StarsRoundedIcon from '@mui/icons-material/StarsRounded'
@@ -38,7 +37,6 @@ const drawerWidth = 248
 const nav = [
   { label: 'Übersicht', path: '/', icon: <DashboardRoundedIcon /> },
   { label: 'Aktivitäten', path: '/aktivitaeten', icon: <DirectionsBikeRoundedIcon /> },
-  { label: 'Gesundheit', path: '/gesundheit', icon: <MonitorHeartRoundedIcon /> },
   { label: 'Meilensteine', path: '/meilensteine', icon: <StarsRoundedIcon /> },
   { label: 'Entwicklung', path: '/entwicklung', icon: <TimelineRoundedIcon /> },
   { label: 'Rekorde', path: '/rekorde', icon: <EmojiEventsRoundedIcon /> },
@@ -70,7 +68,7 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
               to={item.path}
               selected={selected}
               onClick={onNavigate}
-              sx={{ borderRadius: '10px', minHeight: 48, '&.Mui-selected': { bgcolor: 'primary.main', color: 'primary.contrastText', '&:hover': { bgcolor: 'primary.dark' }, '& .MuiListItemIcon-root': { color: 'inherit' } } }}
+              sx={{ borderRadius: 3, minHeight: 48, '&.Mui-selected': { bgcolor: 'primary.main', color: 'primary.contrastText', '&:hover': { bgcolor: 'primary.dark' }, '& .MuiListItemIcon-root': { color: 'inherit' } } }}
             >
               <ListItemIcon sx={{ minWidth: 42 }}>{item.icon}</ListItemIcon>
               <ListItemText primary={item.label} primaryTypographyProps={{ fontWeight: 700 }} />
@@ -91,7 +89,7 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
           minHeight: 56,
           maxHeight: 56,
           flex: 'none',
-          borderRadius: '10px',
+          borderRadius: 3,
           p: 1,
         }}
       >

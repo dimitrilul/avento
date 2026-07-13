@@ -43,7 +43,6 @@ describe('OverlayExportDialog', () => {
     fireEvent.click(screen.getByText('Glass'))
     expect(screen.getByText('Transparenter Hintergrund')).toBeInTheDocument()
     expect(screen.getByTestId('overlay-canvas')).toHaveStyle({ background: 'transparent' })
-    expect(screen.getByTestId('overlay-route-panel')).toHaveStyle({ borderRadius: '12px' })
     expect(screen.getByTestId('overlay-canvas').querySelector('[style*="backdrop-filter"]')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Titel'))

@@ -16,12 +16,6 @@ import de.avento.app.data.model.GamificationChallenge
 import de.avento.app.data.model.GamificationGoal
 import de.avento.app.data.model.GamificationGoalRequest
 import de.avento.app.data.model.GamificationOverview
-import de.avento.app.data.model.HealthConnectionStatus
-import de.avento.app.data.model.HealthData
-import de.avento.app.data.model.HealthOAuthStart
-import de.avento.app.data.model.HealthOverview
-import de.avento.app.data.model.HealthSyncRequest
-import de.avento.app.data.model.HealthSyncResult
 import de.avento.app.data.model.LoginRequest
 import de.avento.app.data.model.LongTermInsights
 import de.avento.app.data.model.OverviewStatistics
@@ -185,30 +179,6 @@ interface AventoApi {
 
     @POST("gamification/challenges/{id}/decline")
     suspend fun declineGamificationChallenge(@Path("id") id: String): GamificationChallenge
-
-    @GET("health/status")
-    suspend fun healthConnection(): HealthConnectionStatus
-
-    @POST("health/oauth/start")
-    suspend fun startHealthOAuth(
-        @Query("force_consent") forceConsent: Boolean = false,
-    ): HealthOAuthStart
-
-    @POST("health/sync")
-    suspend fun syncHealth(@Body request: HealthSyncRequest): HealthSyncResult
-
-    @GET("health/data")
-    suspend fun healthData(
-        @Query("date_from") dateFrom: String? = null,
-        @Query("date_to") dateTo: String? = null,
-        @Query("limit") limit: Int = 500,
-    ): HealthData
-
-    @GET("health/overview")
-    suspend fun healthScores(@Query("day") day: String? = null): HealthOverview
-
-    @DELETE("health/connection")
-    suspend fun disconnectHealth(): Response<Unit>
 
     @GET("activities/{activityId}/photos")
     suspend fun activityPhotos(@Path("activityId") activityId: String): ActivityPhotoList

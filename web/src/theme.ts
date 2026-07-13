@@ -39,7 +39,7 @@ export function createAppTheme(mode: PaletteMode) {
         blue: dark ? '#7EAFE0' : '#4D82BC',
       },
     },
-    shape: { borderRadius: 8 },
+    shape: { borderRadius: 16 },
     typography: {
       fontFamily: 'Manrope Variable, system-ui, sans-serif',
       h1: { fontSize: 'clamp(2rem, 5vw, 3.5rem)', fontWeight: 750, letterSpacing: '-0.04em' },
@@ -62,13 +62,12 @@ export function createAppTheme(mode: PaletteMode) {
       },
       MuiButton: {
         defaultProps: { disableElevation: true },
-        styleOverrides: { root: { minHeight: 44, borderRadius: 10 } },
+        styleOverrides: { root: { minHeight: 44, borderRadius: 14 } },
       },
       MuiCard: {
         defaultProps: { elevation: 0 },
         styleOverrides: {
           root: {
-            borderRadius: 12,
             border: `1px solid ${alpha(dark ? '#D7E4E1' : '#173C39', dark ? 0.1 : 0.08)}`,
             boxShadow: dark ? '0 16px 42px rgba(0, 0, 0, 0.2)' : '0 12px 36px rgba(20, 50, 45, 0.05)',
           },
@@ -76,7 +75,6 @@ export function createAppTheme(mode: PaletteMode) {
       },
       MuiTextField: { defaultProps: { size: 'small' } },
       MuiSelect: { defaultProps: { size: 'small' } },
-      MuiDialog: { styleOverrides: { paper: { borderRadius: 12 } } },
       MuiChip: { styleOverrides: { root: { fontWeight: 650 } } },
       MuiTooltip: { defaultProps: { arrow: true } },
     },

@@ -39,8 +39,6 @@ import de.avento.app.ui.detail.DetailScreen
 import de.avento.app.ui.detail.DetailViewModel
 import de.avento.app.ui.gamification.GamificationScreen
 import de.avento.app.ui.gamification.GamificationViewModel
-import de.avento.app.ui.health.HealthScreen
-import de.avento.app.ui.health.HealthViewModel
 import de.avento.app.ui.insights.InsightsScreen
 import de.avento.app.ui.insights.InsightsViewModel
 import de.avento.app.ui.profile.ProfileScreen
@@ -62,7 +60,6 @@ private object Routes {
     const val Records = "records"
     const val Compare = "compare"
     const val Gamification = "gamification"
-    const val Health = "health"
     const val Insights = "insights"
     const val Chat = "chat"
     const val Profile = "profile"
@@ -197,12 +194,6 @@ private fun ConnectedAventoApp(container: AppContainer, connection: ServerState.
         composable(Routes.Gamification) {
             val vm: GamificationViewModel = viewModel(factory = SimpleViewModelFactory { GamificationViewModel(repository, errorMapper) })
             GamificationScreen(vm)
-        }
-        composable(Routes.Health) {
-            val vm: HealthViewModel = viewModel(factory = SimpleViewModelFactory {
-                HealthViewModel(repository, errorMapper)
-            })
-            HealthScreen(vm, onBack = { navController.popBackStack() })
         }
         composable(Routes.Insights) {
             val vm: InsightsViewModel = viewModel(factory = SimpleViewModelFactory { InsightsViewModel(repository, errorMapper) })
