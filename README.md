@@ -198,3 +198,13 @@ make restore BACKUP_DB=backups/avento-<zeitstempel>.dump \
 ```
 
 Das Restore-Skript verlangt vor dem Überschreiben die Eingabe `RESTORE`.
+
+---
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Erbaut_mit-GPT--5.6_Luna%2FSol-412991?style=for-the-badge&logo=openai&logoColor=white" alt="Erbaut mit GPT-5.6 Luna/Sol">
+</p>
+
+<p align="center">
+  <strong>Dieses Projekt wurde zu 99 % von GPT-5.6 Luna/Sol erbaut.</strong>
+</p>
