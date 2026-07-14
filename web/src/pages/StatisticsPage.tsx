@@ -7,6 +7,7 @@ import LandscapeRoundedIcon from '@mui/icons-material/LandscapeRounded'
 import RouteRoundedIcon from '@mui/icons-material/RouteRounded'
 import SpeedRoundedIcon from '@mui/icons-material/SpeedRounded'
 import TimerRoundedIcon from '@mui/icons-material/TimerRounded'
+import ShareRoundedIcon from '@mui/icons-material/ShareRounded'
 import { Box, Button, Card, CardContent, Chip, Skeleton, Stack, TextField, Typography, useTheme } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -25,6 +26,7 @@ import { MetricCard } from '../components/MetricCard'
 import { PageHeader } from '../components/PageHeader'
 import { EmptyState, ErrorState } from '../components/States'
 import { formatChartValue, formatClockDuration, formatDistance, formatDuration, formatElevation, formatHeartRate, formatSpeedMps } from '../utils/format'
+import { ShareStudioDialog } from '../share/ShareStudioDialog'
 
 type PresetId = 'last_week' | 'four_weeks' | 'last_month' | 'last_quarter' | 'year' | 'custom'
 
@@ -109,6 +111,7 @@ export function StatisticsPage() {
   const initialRange = useMemo(() => rangeForPreset('four_weeks'), [])
   const [preset, setPreset] = useState<PresetId>('four_weeks')
   const [range, setRange] = useState<DateRange>(initialRange)
+  const [shareOpen, setShareOpen] = useState(false)
   const rangeIsValid = Boolean(range.from && range.to && range.from <= range.to)
   const query = useQuery({
     queryKey: ['statistics', 'overview', range.from, range.to, 'auto'],
@@ -148,6 +151,7 @@ export function StatisticsPage() {
         eyebrow="FORTSCHRITT"
         title="Statistiken"
         description="Verfolge Umfang, Konstanz und Belastung über jeden beliebigen Zeitraum – inklusive direktem Vergleich mit der Vorperiode."
+        action={<Button variant="contained" startIcon={<ShareRoundedIcon />} disabled={!data || data.activity_count === 0} onClick={() => setShareOpen(true)}>Rückblick teilen</Button>}
       />
 
       <Card sx={{ mb: 3 }}>
@@ -244,6 +248,17 @@ export function StatisticsPage() {
           ) : <Card><EmptyState title="Noch keine Statistik" description="Für den gewählten Zeitraum wurden keine Aktivitäten gefunden." /></Card>}
         </>
       )}
+      {data && <ShareStudioDialog
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        content={{
+          kind: 'period',
+          periodKind: preset === 'last_week' ? 'week' : preset === 'last_month' ? 'month' : preset === 'year' ? 'year' : 'custom',
+          title: preset === 'last_week' ? 'Meine Woche auf dem Rad' : preset === 'last_month' ? 'Mein Monatsrückblick' : preset === 'year' ? `Mein Radjahr ${new Date(`${range.to}T12:00:00`).getFullYear()}` : 'Mein Radrückblick',
+          dateLabel: `${displayDate(range.from)} – ${displayDate(range.to)}`,
+          statistics: data,
+        }}
+      />}
     </>
   )
 }

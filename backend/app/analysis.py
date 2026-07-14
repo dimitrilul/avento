@@ -533,12 +533,15 @@ def personal_records(
             "distance_m": round(activity.distance_m, 2),
             "moving_time_s": round(activity.moving_time_s, 2),
             "avg_speed_mps": round(activity.avg_speed_mps, 3),
+            "elevation_gain_m": round(activity.elevation_gain_m, 2),
         }
 
     longest = max(items, key=lambda activity: activity.distance_m, default=None)
     fastest = max(items, key=lambda activity: activity.avg_speed_mps, default=None)
+    highest = max(items, key=lambda activity: activity.elevation_gain_m, default=None)
     return {
         "distance_records": distance_records,
         "longest_ride": activity_record(longest),
         "highest_average_speed": activity_record(fastest),
+        "highest_elevation_gain": activity_record(highest),
     }

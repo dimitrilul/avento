@@ -40,6 +40,8 @@ class StatisticsViewModel(
     fun setPreset(preset: String) {
         val end = today()
         val start = when (preset) {
+            "last_week" -> end.minusWeeks(1).with(java.time.DayOfWeek.MONDAY)
+            "last_month" -> end.withDayOfMonth(1).minusMonths(1)
             "30" -> end.minusDays(29)
             "90" -> end.minusDays(89)
             "year" -> end.withDayOfYear(1)
@@ -50,7 +52,11 @@ class StatisticsViewModel(
             it.copy(
                 preset = preset,
                 dateFrom = start?.toString().orEmpty(),
-                dateTo = if (start == null) "" else end.toString(),
+                dateTo = when (preset) {
+                    "last_week" -> start?.plusDays(6)?.toString().orEmpty()
+                    "last_month" -> start?.plusMonths(1)?.minusDays(1)?.toString().orEmpty()
+                    else -> if (start == null) "" else end.toString()
+                },
             )
         }
         load()

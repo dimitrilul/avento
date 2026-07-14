@@ -3,13 +3,18 @@ import RouteRoundedIcon from '@mui/icons-material/RouteRounded'
 import SpeedRoundedIcon from '@mui/icons-material/SpeedRounded'
 import TimerRoundedIcon from '@mui/icons-material/TimerRounded'
 import WorkspacePremiumRoundedIcon from '@mui/icons-material/WorkspacePremiumRounded'
-import { alpha, Box, Button, Card, CardContent, Chip, Skeleton, Stack, Typography, useTheme } from '@mui/material'
+import ShareRoundedIcon from '@mui/icons-material/ShareRounded'
+import { alpha, Box, Button, Card, CardContent, Chip, IconButton, Skeleton, Stack, Tooltip, Typography, useTheme } from '@mui/material'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link as RouterLink } from 'react-router-dom'
 import { insightsApi, type ActivityRecord, type DistanceRecord } from '../api'
 import { EmptyState, ErrorState } from '../components/States'
 import { PageHeader } from '../components/PageHeader'
 import { formatDate, formatDistance, formatDuration, formatSpeedMps } from '../utils/format'
+import { formatElevation } from '../utils/format'
+import { AchievementShareDialog } from '../share/AchievementShareDialog'
+import type { AchievementInfo } from '../share/types'
 
 const recordMethodLabels: Record<string, string> = {
   distance_record_track_points: 'Trackbasierte Abschnittszeit',
@@ -18,6 +23,7 @@ const recordMethodLabels: Record<string, string> = {
 
 export function RecordsPage() {
   const theme = useTheme()
+  const [share, setShare] = useState<{ activityId: string; achievement: AchievementInfo } | null>(null)
   const records = useQuery({
     queryKey: ['statistics', 'records'],
     queryFn: insightsApi.records,
@@ -47,6 +53,7 @@ export function RecordsPage() {
               primaryValue={records.data.longest_ride ? formatDistance(records.data.longest_ride.distance_m) : '–'}
               secondaryValue={records.data.longest_ride ? formatDuration(records.data.longest_ride.moving_time_s) : undefined}
               accent={theme.palette.chart.blue}
+              onShare={records.data.longest_ride ? () => setShare({ activityId: records.data.longest_ride!.activity_id, achievement: { kind: 'longest_ride', label: 'Längste Tour', value: formatDistance(records.data.longest_ride!.distance_m), detail: formatDuration(records.data.longest_ride!.moving_time_s) } }) : undefined}
             />
             <ActivityRecordCard
               title="Höchste Durchschnittsgeschwindigkeit"
@@ -55,6 +62,16 @@ export function RecordsPage() {
               primaryValue={records.data.highest_average_speed ? formatSpeedMps(records.data.highest_average_speed.avg_speed_mps) : '–'}
               secondaryValue={records.data.highest_average_speed ? formatDistance(records.data.highest_average_speed.distance_m) : undefined}
               accent={theme.palette.chart.amber}
+              onShare={records.data.highest_average_speed ? () => setShare({ activityId: records.data.highest_average_speed!.activity_id, achievement: { kind: 'fastest_ride', label: 'Schnellste Tour', value: formatSpeedMps(records.data.highest_average_speed!.avg_speed_mps), detail: formatDistance(records.data.highest_average_speed!.distance_m) } }) : undefined}
+            />
+            <ActivityRecordCard
+              title="Höchste Tour"
+              icon={<WorkspacePremiumRoundedIcon />}
+              record={records.data.highest_elevation_gain}
+              primaryValue={records.data.highest_elevation_gain ? formatElevation(records.data.highest_elevation_gain.elevation_gain_m) : '–'}
+              secondaryValue={records.data.highest_elevation_gain ? formatDistance(records.data.highest_elevation_gain.distance_m) : undefined}
+              accent={theme.palette.chart.coral}
+              onShare={records.data.highest_elevation_gain ? () => setShare({ activityId: records.data.highest_elevation_gain!.activity_id, achievement: { kind: 'elevation_record', label: 'Höhenmeter-Rekord', value: formatElevation(records.data.highest_elevation_gain!.elevation_gain_m), detail: formatDistance(records.data.highest_elevation_gain!.distance_m) } }) : undefined}
             />
           </Box>
 
@@ -68,7 +85,7 @@ export function RecordsPage() {
 
           {records.data.distance_records.length > 0 ? (
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', xl: 'repeat(5, 1fr)' }, gap: 1.5 }}>
-              {records.data.distance_records.map((record, index) => <DistanceRecordCard key={record.target_distance_m} record={record} rank={index + 1} />)}
+              {records.data.distance_records.map((record, index) => <DistanceRecordCard key={record.target_distance_m} record={record} rank={index + 1} onShare={() => setShare({ activityId: record.activity_id, achievement: { kind: 'distance_pr', label: `Bestzeit über ${(record.target_distance_m / 1000).toLocaleString('de-DE')} km`, value: formatDuration(record.duration_s), detail: formatSpeedMps(record.avg_speed_mps), segmentStartM: record.segment_start_m, segmentEndM: record.segment_end_m } })} />)}
             </Box>
           ) : (
             <Card><EmptyState title="Noch keine Distanzrekorde" description="Sobald eine Tour mindestens 10 Kilometer enthält, erscheint hier die erste Bestzeit." /></Card>
@@ -91,11 +108,12 @@ export function RecordsPage() {
           )}
         </>
       )}
+      <AchievementShareDialog open={Boolean(share)} onClose={() => setShare(null)} activityId={share?.activityId ?? null} achievement={share?.achievement ?? null} />
     </>
   )
 }
 
-function ActivityRecordCard({ title, icon, record, primaryValue, secondaryValue, accent }: { title: string; icon: React.ReactNode; record: ActivityRecord | null; primaryValue: string; secondaryValue?: string; accent: string }) {
+function ActivityRecordCard({ title, icon, record, primaryValue, secondaryValue, accent, onShare }: { title: string; icon: React.ReactNode; record: ActivityRecord | null; primaryValue: string; secondaryValue?: string; accent: string; onShare?: () => void }) {
   const theme = useTheme()
   return (
     <Card sx={{ overflow: 'hidden', background: `linear-gradient(140deg, ${alpha(accent, .14)}, ${theme.palette.background.paper} 60%)` }}>
@@ -106,7 +124,7 @@ function ActivityRecordCard({ title, icon, record, primaryValue, secondaryValue,
             <Typography variant="h2" sx={{ fontSize: { xs: '2rem', md: '2.4rem' }, mt: 1 }}>{primaryValue}</Typography>
             {secondaryValue && <Typography color="text.secondary">{secondaryValue}</Typography>}
           </Box>
-          <Box sx={{ width: 52, height: 52, borderRadius: 3.5, display: 'grid', placeItems: 'center', bgcolor: alpha(accent, .14), color: accent, '& svg': { fontSize: 30 } }}>{icon}</Box>
+          <Stack alignItems="flex-end" gap={1}><Box sx={{ width: 52, height: 52, borderRadius: 3.5, display: 'grid', placeItems: 'center', bgcolor: alpha(accent, .14), color: accent, '& svg': { fontSize: 30 } }}>{icon}</Box>{onShare && <Tooltip title="Rekord teilen"><IconButton aria-label={`${title} teilen`} onClick={onShare}><ShareRoundedIcon /></IconButton></Tooltip>}</Stack>
         </Stack>
         {record ? (
           <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} gap={1} sx={{ mt: 2.5 }}>
@@ -119,7 +137,7 @@ function ActivityRecordCard({ title, icon, record, primaryValue, secondaryValue,
   )
 }
 
-function DistanceRecordCard({ record, rank }: { record: DistanceRecord; rank: number }) {
+function DistanceRecordCard({ record, rank, onShare }: { record: DistanceRecord; rank: number; onShare: () => void }) {
   const targetKm = record.target_distance_m / 1000
   return (
     <Card sx={{ height: '100%' }}>
@@ -129,7 +147,7 @@ function DistanceRecordCard({ record, rank }: { record: DistanceRecord; rank: nu
             <EmojiEventsRoundedIcon color={rank === 1 ? 'secondary' : 'primary'} />
             <Typography variant="h3">{targetKm.toLocaleString('de-DE')} km</Typography>
           </Stack>
-          {record.estimated && <Chip size="small" variant="outlined" label="geschätzt" />}
+          <Stack direction="row" alignItems="center">{record.estimated && <Chip size="small" variant="outlined" label="geschätzt" />}<Tooltip title="Bestzeit teilen"><IconButton aria-label={`${targetKm} km Bestzeit teilen`} onClick={onShare}><ShareRoundedIcon fontSize="small" /></IconButton></Tooltip></Stack>
         </Stack>
         <Typography variant="h2" sx={{ fontSize: '1.8rem', mt: 2 }}>{formatDuration(record.duration_s)}</Typography>
         <Stack direction="row" alignItems="center" gap={.6} sx={{ mt: .5 }}><TimerRoundedIcon sx={{ fontSize: 17, color: 'text.secondary' }} /><Typography variant="body2" color="text.secondary">{formatSpeedMps(record.avg_speed_mps)} im Schnitt</Typography></Stack>

@@ -395,6 +395,7 @@ data class ActivityRecord(
     @param:Json(name = "distance_m") val distanceMeters: Double,
     @param:Json(name = "moving_time_s") val movingTimeSeconds: Double,
     @param:Json(name = "avg_speed_mps") val averageSpeedMps: Double,
+    @param:Json(name = "elevation_gain_m") val elevationGainMeters: Double,
 )
 
 @JsonClass(generateAdapter = false)
@@ -403,6 +404,7 @@ data class PersonalRecords(
     @param:Json(name = "distance_records") val distanceRecords: List<DistanceRecord> = emptyList(),
     @param:Json(name = "longest_ride") val longestRide: ActivityRecord? = null,
     @param:Json(name = "highest_average_speed") val highestAverageSpeed: ActivityRecord? = null,
+    @param:Json(name = "highest_elevation_gain") val highestElevationGain: ActivityRecord? = null,
     val methods: List<AIDataMethod> = emptyList(),
 )
 

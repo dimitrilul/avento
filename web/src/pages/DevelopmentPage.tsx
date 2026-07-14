@@ -8,16 +8,18 @@ import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded'
 import RouteRoundedIcon from '@mui/icons-material/RouteRounded'
 import SpeedRoundedIcon from '@mui/icons-material/SpeedRounded'
 import WaterDropRoundedIcon from '@mui/icons-material/WaterDropRounded'
+import ShareRoundedIcon from '@mui/icons-material/ShareRounded'
 import { Alert, alpha, Box, Button, Card, CardContent, Chip, MenuItem, Skeleton, Stack, TextField, Typography, useTheme } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { insightsApi, type InsightPattern } from '../api'
+import { insightsApi, statisticsApi, type InsightPattern } from '../api'
 import { AIDataBasisPanel } from '../components/AIDataBasisPanel'
 import { MarkdownText } from '../components/MarkdownText'
 import { MetricCard } from '../components/MetricCard'
 import { PageHeader } from '../components/PageHeader'
 import { EmptyState, ErrorState } from '../components/States'
 import { formatChartValue, formatDistance, formatDuration, formatHydration, formatSpeedMps } from '../utils/format'
+import { ShareStudioDialog } from '../share/ShareStudioDialog'
 
 const currentYear = new Date().getFullYear()
 const seasons = [
@@ -59,6 +61,7 @@ export function DevelopmentPage() {
   const [years, setYears] = useState(3)
   const [reviewYear, setReviewYear] = useState(currentYear)
   const [season, setSeason] = useState('year')
+  const [shareOpen, setShareOpen] = useState(false)
   const range = rangeForYears(years)
   const insights = useQuery({
     queryKey: ['statistics', 'insights', range.from, range.to],
@@ -67,6 +70,11 @@ export function DevelopmentPage() {
   const review = useQuery({
     queryKey: ['statistics', 'review', reviewYear, season],
     queryFn: () => insightsApi.periodReview(reviewYear, season),
+  })
+  const reviewStatistics = useQuery({
+    queryKey: ['statistics', 'overview', review.data?.period.date_from, review.data?.period.date_to, 'review-share'],
+    queryFn: () => statisticsApi.overview(review.data!.period.date_from, review.data!.period.date_to, 'auto'),
+    enabled: Boolean(review.data),
   })
   const monthly = (insights.data?.monthly ?? []).map((point) => ({
     ...point,
@@ -169,6 +177,7 @@ export function DevelopmentPage() {
             <Stack direction={{ xs: 'column', sm: 'row' }} gap={1}>
               <TextField select label="Jahr" value={reviewYear} onChange={(event) => setReviewYear(Number(event.target.value))} sx={{ minWidth: 120 }}>{Array.from({ length: 10 }, (_, index) => currentYear - index).map((year) => <MenuItem key={year} value={year}>{year}</MenuItem>)}</TextField>
               <TextField select label="Zeitraum" value={season} onChange={(event) => setSeason(event.target.value)} sx={{ minWidth: 160 }}>{seasons.map((item) => <MenuItem key={item.value} value={item.value}>{item.label}</MenuItem>)}</TextField>
+              <Button variant="contained" startIcon={<ShareRoundedIcon />} disabled={!review.data || !reviewStatistics.data || reviewStatistics.data.activity_count === 0} onClick={() => setShareOpen(true)}>Teilen</Button>
             </Stack>
           </Stack>
           {review.isLoading && <Skeleton variant="rounded" height={230} />}
@@ -184,6 +193,7 @@ export function DevelopmentPage() {
           )}
         </CardContent>
       </Card>
+      {review.data && reviewStatistics.data && <ShareStudioDialog open={shareOpen} onClose={() => setShareOpen(false)} content={{ kind: 'period', periodKind: season === 'year' ? 'year' : 'custom', title: season === 'year' ? `Mein Radjahr ${review.data.year}` : `${seasons.find((item) => item.value === season)?.label} ${review.data.year}`, dateLabel: `${review.data.period.date_from} – ${review.data.period.date_to}`, statistics: reviewStatistics.data, summary: review.data.summary }} />}
     </>
   )
 }

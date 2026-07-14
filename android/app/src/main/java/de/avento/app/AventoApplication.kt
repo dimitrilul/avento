@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import org.maplibre.android.MapLibre
 
 data class PendingImport(val uri: Uri, val displayName: String? = null)
 
@@ -90,6 +91,7 @@ class AventoApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        MapLibre.getInstance(this)
         container = AppContainer(this)
     }
 }

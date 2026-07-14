@@ -399,6 +399,7 @@ class ActivityRecord(BaseModel):
     distance_m: float
     moving_time_s: float
     avg_speed_mps: float
+    elevation_gain_m: float
 
 
 class PersonalRecordsResponse(BaseModel):
@@ -406,6 +407,7 @@ class PersonalRecordsResponse(BaseModel):
     distance_records: list[DistanceRecord]
     longest_ride: ActivityRecord | None = None
     highest_average_speed: ActivityRecord | None = None
+    highest_elevation_gain: ActivityRecord | None = None
     methods: list[AIDataMethod] = Field(default_factory=list)
 
 

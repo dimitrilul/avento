@@ -87,6 +87,8 @@ import de.avento.app.ui.components.ByteArrayImage
 import de.avento.app.ui.components.LineChart
 import de.avento.app.ui.components.RoutePreview
 import de.avento.app.ui.theme.AventoPalette
+import de.avento.app.share.OverlayShareContent
+import de.avento.app.share.ShareStudio
 import de.avento.app.util.SummaryImageExporter
 import de.avento.app.util.asDistance
 import de.avento.app.util.asDuration
@@ -110,6 +112,7 @@ fun DetailScreen(viewModel: DetailViewModel, onBack: () -> Unit, onDeleted: () -
     var showEdit by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+    var showShare by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri ?: return@rememberLauncherForActivityResult
@@ -162,7 +165,7 @@ fun DetailScreen(viewModel: DetailViewModel, onBack: () -> Unit, onDeleted: () -
                                     leadingIcon = { Icon(Icons.Default.Share, null) },
                                     onClick = {
                                         showMenu = false
-                                        SummaryImageExporter.share(context, activity, state.track)
+                                        showShare = true
                                     },
                                 )
                                 DropdownMenuItem(
@@ -242,6 +245,15 @@ fun DetailScreen(viewModel: DetailViewModel, onBack: () -> Unit, onDeleted: () -
         EditDialog(activity, state.saving, { showEdit = false }) { title, type, notes, hydration ->
             viewModel.save(title, type, notes, hydration) { showEdit = false }
         }
+    }
+    if (showShare) state.activity?.let { activity ->
+        ShareStudio(
+            content = OverlayShareContent.ActivityContent(activity, state.track),
+            photos = state.photos,
+            loadPhoto = viewModel::photoBytes,
+            onDismiss = { showShare = false },
+            onShare = { bitmap, title -> SummaryImageExporter.share(context, bitmap, title) },
+        )
     }
     if (showDelete) {
         AlertDialog(

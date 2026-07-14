@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
@@ -25,9 +26,13 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.avento.app.ui.components.AventoTopBar
 import de.avento.app.ui.components.DataBasisCard
@@ -36,13 +41,18 @@ import de.avento.app.ui.components.ErrorPane
 import de.avento.app.ui.components.LoadingPane
 import de.avento.app.ui.components.SectionTitle
 import java.util.Locale
+import de.avento.app.share.OverlayShareContent
+import de.avento.app.share.ShareStudio
+import de.avento.app.util.SummaryImageExporter
 
 @Composable
 fun InsightsScreen(viewModel: InsightsViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    var showShare by remember { mutableStateOf(false) }
     val insights = state.insights
     Scaffold(
-        topBar = { AventoTopBar("Entwicklung", actions = { IconButton(onClick = viewModel::load) { Icon(Icons.Default.Refresh, "Aktualisieren") } }) },
+        topBar = { AventoTopBar("Entwicklung", actions = { if (state.review != null && (state.reviewStatistics?.activityCount ?: 0) > 0) IconButton(onClick = { showShare = true }) { Icon(Icons.Default.Share, "Rückblick teilen") }; IconButton(onClick = viewModel::load) { Icon(Icons.Default.Refresh, "Aktualisieren") } }) },
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
@@ -90,6 +100,13 @@ fun InsightsScreen(viewModel: InsightsViewModel) {
                 }
             }
         }
+    }
+    if (showShare && state.review != null && state.reviewStatistics != null) {
+        val review = state.review!!
+        ShareStudio(
+            OverlayShareContent.PeriodContent(if (review.season == "year") "Mein Radjahr ${review.year}" else "Rückblick ${review.year} · ${review.season}", "${review.period.dateFrom} – ${review.period.dateTo}", state.reviewStatistics!!, review.summary),
+            emptyList(), { ByteArray(0) }, { showShare = false },
+        ) { bitmap, title -> SummaryImageExporter.share(context, bitmap, title) }
     }
 }
 

@@ -10,7 +10,7 @@ afterEach(() => {
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
-  value: vi.fn().mockImplementation((query: string) => ({
+  value: (query: string) => ({
     matches: false,
     media: query,
     onchange: null,
@@ -19,7 +19,7 @@ Object.defineProperty(window, 'matchMedia', {
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
     dispatchEvent: vi.fn(),
-  })),
+  }),
 })
 
 class ResizeObserverMock {
@@ -30,3 +30,6 @@ class ResizeObserverMock {
 
 vi.stubGlobal('ResizeObserver', ResizeObserverMock)
 vi.stubGlobal('scrollTo', vi.fn())
+
+Object.defineProperty(window.URL, 'createObjectURL', { writable: true, value: () => 'blob:test' })
+Object.defineProperty(window.URL, 'revokeObjectURL', { writable: true, value: () => undefined })

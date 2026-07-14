@@ -300,6 +300,7 @@ def _stored_activity(
     hydration_ml: int | None = None,
     weather: dict | None = None,
     track_points: list[dict] | None = None,
+    elevation_gain_m: float = 100,
 ) -> Activity:
     return Activity(
         user_id=user_id,
@@ -316,7 +317,7 @@ def _stored_activity(
         pause_time_s=0,
         avg_speed_mps=speed_mps,
         max_speed_mps=speed_mps,
-        elevation_gain_m=100,
+        elevation_gain_m=elevation_gain_m,
         avg_hr_bpm=avg_hr_bpm,
         max_hr_bpm=round(avg_hr_bpm + 20) if avg_hr_bpm else None,
         training_load=50,
@@ -382,8 +383,18 @@ def test_personal_records_prefer_interpolated_track_points(client: TestClient, a
         speed_mps=20_000 / 1_800,
         track_points=_track(fast_start, [(0, 0), (5_000, 600), (15_000, 1_200), (20_000, 1_800)]),
     )
+    climbing_start = datetime(2025, 7, 1, 8, tzinfo=timezone.utc)
+    climbing_ride = _stored_activity(
+        user_id,
+        "Bergtag",
+        climbing_start,
+        distance_m=15_000,
+        duration_s=3_600,
+        speed_mps=15_000 / 3_600,
+        elevation_gain_m=1_450,
+    )
     with SessionLocal() as db:
-        db.add_all([long_ride, fast_ride])
+        db.add_all([long_ride, fast_ride, climbing_ride])
         db.commit()
 
     response = client.get("/api/v1/statistics/records", headers=auth)
@@ -397,6 +408,8 @@ def test_personal_records_prefer_interpolated_track_points(client: TestClient, a
     assert by_distance[10_000]["estimated"] is False
     assert records["longest_ride"]["activity_id"] == long_ride.id
     assert records["highest_average_speed"]["activity_id"] == fast_ride.id
+    assert records["highest_elevation_gain"]["activity_id"] == climbing_ride.id
+    assert records["highest_elevation_gain"]["elevation_gain_m"] == 1_450
     assert records["methods"][0]["parameters"]["time_basis"] == "elapsed"
 
 

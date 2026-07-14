@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.WaterDrop
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
@@ -29,10 +30,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.avento.app.ui.components.AventoTopBar
 import de.avento.app.ui.components.EmptyPane
@@ -46,17 +51,23 @@ import de.avento.app.util.asDuration
 import de.avento.app.util.asElevation
 import de.avento.app.util.asInteger
 import de.avento.app.util.asSpeed
+import de.avento.app.share.OverlayShareContent
+import de.avento.app.share.ShareStudio
+import de.avento.app.util.SummaryImageExporter
 import java.util.Locale
 
 @Composable
 fun StatisticsScreen(viewModel: StatisticsViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    var showShare by remember { mutableStateOf(false) }
     val data = state.statistics
     Scaffold(
         topBar = {
             AventoTopBar(
                 title = "Statistiken",
                 actions = {
+                    if (data != null && data.activityCount > 0) IconButton(onClick = { showShare = true }) { Icon(Icons.Default.Share, "Rückblick teilen") }
                     IconButton(onClick = viewModel::load) { Icon(Icons.Default.Refresh, "Aktualisieren") }
                 },
             )
@@ -73,7 +84,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel) {
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    listOf("30" to "30 Tage", "90" to "90 Tage", "year" to "Dieses Jahr", "all" to "Gesamt").forEach { (value, label) ->
+                    listOf("last_week" to "Letzte Woche", "last_month" to "Letzter Monat", "30" to "30 Tage", "90" to "90 Tage", "year" to "Dieses Jahr", "all" to "Gesamt").forEach { (value, label) ->
                         FilterChip(selected = state.preset == value, onClick = { viewModel.setPreset(value) }, label = { Text(label) })
                     }
                 }
@@ -208,6 +219,16 @@ fun StatisticsScreen(viewModel: StatisticsViewModel) {
             }
             if (state.error != null && data != null) item { ErrorPane(state.error.orEmpty(), viewModel::load) }
         }
+    }
+    if (showShare && data != null) {
+        val title = when (state.preset) { "last_week" -> "Meine Woche auf dem Rad"; "last_month" -> "Mein Monatsrückblick"; "year" -> "Mein Radjahr ${java.time.LocalDate.now().year}"; else -> "Mein Radrückblick" }
+        ShareStudio(
+            content = OverlayShareContent.PeriodContent(title, "${state.dateFrom} – ${state.dateTo}", data),
+            photos = emptyList(),
+            loadPhoto = { ByteArray(0) },
+            onDismiss = { showShare = false },
+            onShare = { bitmap, name -> SummaryImageExporter.share(context, bitmap, name) },
+        )
     }
 }
 

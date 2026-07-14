@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import de.avento.app.data.AventoRepository
 import de.avento.app.data.model.LongTermInsights
 import de.avento.app.data.model.PeriodReview
+import de.avento.app.data.model.OverviewStatistics
+import de.avento.app.data.model.StatisticsRange
 import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +18,7 @@ data class InsightsUiState(
     val loading: Boolean = true,
     val insights: LongTermInsights? = null,
     val review: PeriodReview? = null,
+    val reviewStatistics: OverviewStatistics? = null,
     val year: Int = LocalDate.now().year,
     val season: String = "year",
     val error: String? = null,
@@ -37,8 +40,9 @@ class InsightsViewModel(
             runCatching {
                 val insights = repository.longTermInsights(null, null)
                 val review = repository.periodReview(current.year, current.season)
-                insights to review
-            }.onSuccess { (insights, review) -> _state.update { it.copy(loading = false, insights = insights, review = review) } }
+                val statistics = repository.statistics(StatisticsRange(review.period.dateFrom, review.period.dateTo, "auto"))
+                Triple(insights, review, statistics)
+            }.onSuccess { (insights, review, statistics) -> _state.update { it.copy(loading = false, insights = insights, review = review, reviewStatistics = statistics) } }
                 .onFailure { failure -> _state.update { it.copy(loading = false, error = errorMessage(failure)) } }
         }
     }

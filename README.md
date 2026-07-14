@@ -2,6 +2,8 @@
   <img src="docs/assets/avento-logo-banner.png" alt="Avento – Radfahranalyse" width="720">
 </p>
 
+Aktivitäten, Rekorde sowie Wochen-, Monats- und Jahresrückblicke lassen sich im Web und in der Android-App als konfigurierbare Share-Grafiken exportieren. Die Architektur der sechs Vorlagen und der Karten-/Foto-Pipeline ist in [docs/overlay-engine.md](docs/overlay-engine.md) beschrieben.
+
 <p align="center">
   <strong>Deine Fahrten. Deine Daten. Dein Fortschritt.</strong><br>
   Private Radfahranalyse mit Strecken, Wetter, persönlichen Rekorden und optionalem KI-Coach.

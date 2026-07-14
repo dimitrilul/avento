@@ -38,7 +38,7 @@ import {
 } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom'
-import { activitiesApi, type Activity, type ActivityUpdate } from '../api'
+import { activitiesApi, insightsApi, type Activity, type ActivityUpdate, type PersonalRecordsResponse } from '../api'
 import { ActivityCharts } from '../components/ActivityCharts'
 import { ActivityPhotoGallery } from '../components/ActivityPhotoGallery'
 import { AiSummaryCard } from '../components/AiSummaryCard'
@@ -47,6 +47,7 @@ import { OverlayExportDialog } from '../components/OverlayExportDialog'
 import { ContentLoading, ErrorState } from '../components/States'
 import { TrackMap } from '../components/TrackMap'
 import { WeatherCard } from '../components/WeatherCard'
+import type { AchievementInfo } from '../share/types'
 import {
   activityTypeLabels,
   activityTypes,
@@ -71,6 +72,7 @@ export function ActivityDetailPage() {
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
   const activity = useQuery({ queryKey: ['activity', id], queryFn: () => activitiesApi.get(id), enabled: Boolean(id) })
   const track = useQuery({ queryKey: ['activity', id, 'track'], queryFn: () => activitiesApi.track(id), enabled: Boolean(id) })
+  const records = useQuery({ queryKey: ['statistics', 'records'], queryFn: insightsApi.records, enabled: Boolean(id) && exportOpen })
   const remove = useMutation({
     mutationFn: () => activitiesApi.delete(id),
     onSuccess: async () => {
@@ -95,6 +97,7 @@ export function ActivityDetailPage() {
   if (activity.isError || !activity.data) return <ErrorState error={activity.error ?? new Error('Aktivität nicht gefunden.')} onRetry={() => void activity.refetch()} />
   const item = activity.data
   const points = track.data?.points ?? []
+  const achievement = achievementForActivity(item.id, records.data)
 
   return (
     <>
@@ -202,7 +205,7 @@ export function ActivityDetailPage() {
       </Box>
 
       <EditActivityDialog open={editOpen} onClose={() => setEditOpen(false)} activity={item} />
-      <OverlayExportDialog open={exportOpen} onClose={() => setExportOpen(false)} activity={item} points={points} />
+      <OverlayExportDialog open={exportOpen} onClose={() => setExportOpen(false)} activity={item} points={points} achievement={achievement} />
       <Dialog open={deleteOpen} onClose={() => !remove.isPending && setDeleteOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle>Aktivität löschen?</DialogTitle>
         <DialogContent><Typography>„{item.title}“ und die zugehörige TCX-Datei werden dauerhaft gelöscht.</Typography>{remove.isError && <Alert severity="error" sx={{ mt: 2 }}>{errorMessage(remove.error)}</Alert>}</DialogContent>
@@ -210,6 +213,15 @@ export function ActivityDetailPage() {
       </Dialog>
     </>
   )
+}
+
+function achievementForActivity(activityId: string, records?: PersonalRecordsResponse): AchievementInfo | null {
+  if (!records) return null
+  if (records.highest_elevation_gain?.activity_id === activityId) return { kind: 'elevation_record', label: 'Höhenmeter-Rekord', value: formatElevation(records.highest_elevation_gain.elevation_gain_m), detail: formatDistance(records.highest_elevation_gain.distance_m) }
+  if (records.longest_ride?.activity_id === activityId) return { kind: 'longest_ride', label: 'Längste Tour', value: formatDistance(records.longest_ride.distance_m), detail: formatDuration(records.longest_ride.moving_time_s) }
+  if (records.highest_average_speed?.activity_id === activityId) return { kind: 'fastest_ride', label: 'Schnellste Tour', value: formatSpeedMps(records.highest_average_speed.avg_speed_mps), detail: formatDistance(records.highest_average_speed.distance_m) }
+  const distanceRecord = records.distance_records.find((record) => record.activity_id === activityId)
+  return distanceRecord ? { kind: 'distance_pr', label: `Bestzeit über ${(distanceRecord.target_distance_m / 1000).toLocaleString('de-DE')} km`, value: formatDuration(distanceRecord.duration_s), detail: formatSpeedMps(distanceRecord.avg_speed_mps), segmentStartM: distanceRecord.segment_start_m, segmentEndM: distanceRecord.segment_end_m } : null
 }
 
 function EditActivityDialog({ open, onClose, activity }: { open: boolean; onClose: () => void; activity: Activity }) {

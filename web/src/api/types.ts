@@ -395,6 +395,7 @@ export interface ActivityRecord {
   distance_m: number
   moving_time_s: number
   avg_speed_mps: number
+  elevation_gain_m: number
 }
 
 export interface PersonalRecordsResponse {
@@ -402,6 +403,7 @@ export interface PersonalRecordsResponse {
   distance_records: DistanceRecord[]
   longest_ride: ActivityRecord | null
   highest_average_speed: ActivityRecord | null
+  highest_elevation_gain: ActivityRecord | null
   methods: AIDataMethod[]
 }
 
