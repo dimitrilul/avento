@@ -162,9 +162,9 @@ export const activitiesApi = {
 }
 
 export const statisticsApi = {
-  overview: (dateFrom?: string, dateTo?: string, granularity: StatisticsGranularity = 'auto') =>
+  overview: (dateFrom?: string, dateTo?: string, granularity: StatisticsGranularity = 'auto', type?: string) =>
     apiRequest<StatisticsOverview>(
-      `/statistics/overview${queryString({ date_from: dateFrom, date_to: dateTo, granularity })}`,
+      `/statistics/overview${queryString({ date_from: dateFrom, date_to: dateTo, granularity, type })}`,
     ),
 }
 

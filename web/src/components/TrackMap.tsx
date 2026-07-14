@@ -33,6 +33,7 @@ type TrackMapProps = {
   markers?: TrackMapMarker[]
   onPointHover?: (sourceIndex: number) => void
   height?: { xs: number; md: number } | number
+  variant?: 'classic' | 'minimal'
 }
 
 function haversineDistance(
@@ -91,6 +92,7 @@ export function TrackMap({
   markers = [],
   onPointHover,
   height = { xs: 340, md: 440 },
+  variant = 'classic',
 }: TrackMapProps) {
   const container = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
@@ -102,6 +104,7 @@ export function TrackMap({
   const [mapReady, setMapReady] = useState(false)
   const entries = useMemo(() => coordinateEntries(points), [points])
   const coordinates = useMemo(() => entries.map((entry) => entry.coordinate), [entries])
+  const minimal = variant === 'minimal'
 
   useEffect(() => {
     hoverCallbackRef.current = onPointHover
@@ -116,6 +119,8 @@ export function TrackMap({
       center: coordinates[0],
       zoom: 11,
       attributionControl: false,
+      cooperativeGestures: minimal,
+      dragRotate: !minimal,
     })
     mapRef.current = map
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'top-right')
@@ -130,14 +135,14 @@ export function TrackMap({
         id: 'route-glow',
         type: 'line',
         source: 'route',
-        paint: { 'line-color': '#FFFFFF', 'line-width': 8, 'line-opacity': .86 },
+        paint: { 'line-color': minimal ? '#061E1D' : '#FFFFFF', 'line-width': 8, 'line-opacity': .86 },
         layout: { 'line-cap': 'round', 'line-join': 'round' },
       })
       map.addLayer({
         id: 'route-line',
         type: 'line',
         source: 'route',
-        paint: { 'line-color': '#0E6562', 'line-width': 4, 'line-opacity': .82 },
+        paint: { 'line-color': minimal ? '#65C8C1' : '#0E6562', 'line-width': 4, 'line-opacity': .9 },
         layout: { 'line-cap': 'round', 'line-join': 'round' },
       })
       map.addSource('selected-route', { type: 'geojson', data: emptyFeatureCollection() })
@@ -145,14 +150,14 @@ export function TrackMap({
         id: 'selected-route-glow',
         type: 'line',
         source: 'selected-route',
-        paint: { 'line-color': '#FFFFFF', 'line-width': 10, 'line-opacity': .94 },
+        paint: { 'line-color': minimal ? '#061E1D' : '#FFFFFF', 'line-width': 10, 'line-opacity': .94 },
         layout: { 'line-cap': 'round', 'line-join': 'round' },
       })
       map.addLayer({
         id: 'selected-route-line',
         type: 'line',
         source: 'selected-route',
-        paint: { 'line-color': '#4D82BC', 'line-width': 6 },
+        paint: { 'line-color': minimal ? '#82AEDA' : '#4D82BC', 'line-width': 6 },
         layout: { 'line-cap': 'round', 'line-join': 'round' },
       })
       map.addSource('track-points', {
@@ -180,8 +185,8 @@ export function TrackMap({
         if (Number.isFinite(sourceIndex)) hoverCallbackRef.current?.(sourceIndex)
       })
 
-      new maplibregl.Marker({ color: '#A5C838' }).setLngLat(coordinates[0]).addTo(map)
-      new maplibregl.Marker({ color: '#E26D5A' }).setLngLat(coordinates.at(-1)!).addTo(map)
+      new maplibregl.Marker({ color: minimal ? '#B8D95B' : '#A5C838' }).setLngLat(coordinates[0]).addTo(map)
+      new maplibregl.Marker({ color: minimal ? '#E89586' : '#E26D5A' }).setLngLat(coordinates.at(-1)!).addTo(map)
       const bounds = coordinates.reduce(
         (current, coordinate) => current.extend(coordinate),
         new maplibregl.LngLatBounds(coordinates[0], coordinates[0]),
@@ -202,7 +207,7 @@ export function TrackMap({
       mapRef.current = null
       map.remove()
     }
-  }, [coordinates, entries])
+  }, [coordinates, entries, minimal])
 
   useEffect(() => {
     const map = mapRef.current
@@ -213,19 +218,20 @@ export function TrackMap({
     if (!showKilometerMarkers || !entries.length) return
 
     const totalKilometres = Math.floor(entries.at(-1)!.distanceM / 1000)
+    const markerStep = minimal ? (totalKilometres > 20 ? 5 : totalKilometres > 10 ? 2 : 1) : 1
     let entryIndex = 0
-    for (let kilometre = 1; kilometre <= totalKilometres; kilometre += 1) {
+    for (let kilometre = markerStep; kilometre <= totalKilometres; kilometre += markerStep) {
       while (entryIndex < entries.length - 1 && entries[entryIndex].distanceM < kilometre * 1000) entryIndex += 1
       const element = document.createElement('div')
       element.textContent = String(kilometre)
       element.title = `${kilometre} km`
       Object.assign(element.style, {
         alignItems: 'center',
-        background: '#FFFFFF',
-        border: '2px solid #0E6562',
+        background: minimal ? '#111817' : '#FFFFFF',
+        border: `2px solid ${minimal ? '#65C8C1' : '#0E6562'}`,
         borderRadius: '999px',
         boxShadow: '0 2px 8px rgba(23, 35, 34, .2)',
-        color: '#083B3A',
+        color: minimal ? '#F3F7F6' : '#083B3A',
         display: 'flex',
         font: '700 10px Manrope, sans-serif',
         height: '24px',
@@ -236,21 +242,21 @@ export function TrackMap({
         new maplibregl.Marker({ element }).setLngLat(entries[entryIndex].coordinate).addTo(map),
       )
     }
-  }, [entries, mapReady, showKilometerMarkers])
+  }, [entries, mapReady, minimal, showKilometerMarkers])
 
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady) return
     extraMarkersRef.current.forEach((marker) => marker.remove())
     extraMarkersRef.current = markers.map((marker) => {
-      const mapMarker = new maplibregl.Marker({ color: marker.color ?? '#E9A23B', scale: .8 })
+      const mapMarker = new maplibregl.Marker({ color: marker.color ?? (minimal ? '#EBC477' : '#E9A23B'), scale: .8 })
         .setLngLat([marker.longitude, marker.latitude])
       if (marker.label) {
         mapMarker.setPopup(new maplibregl.Popup({ offset: 18 }).setText(marker.label))
       }
       return mapMarker.addTo(map)
     })
-  }, [mapReady, markers])
+  }, [mapReady, markers, minimal])
 
   useEffect(() => {
     const map = mapRef.current
@@ -260,10 +266,10 @@ export function TrackMap({
     if (activePointIndex == null) return
     const activeEntry = entries.find((entry) => entry.sourceIndex === activePointIndex)
     if (!activeEntry) return
-    activeMarkerRef.current = new maplibregl.Marker({ color: '#E9A23B', scale: .82 })
+    activeMarkerRef.current = new maplibregl.Marker({ color: minimal ? '#EBC477' : '#E9A23B', scale: .82 })
       .setLngLat(activeEntry.coordinate)
       .addTo(map)
-  }, [activePointIndex, entries, mapReady])
+  }, [activePointIndex, entries, mapReady, minimal])
 
   useEffect(() => {
     const map = mapRef.current
@@ -285,20 +291,20 @@ export function TrackMap({
 
     if (selectedEntries.length >= 2) {
       selectionMarkersRef.current = [
-        new maplibregl.Marker({ color: '#4D82BC', scale: .65 }).setLngLat(selectedEntries[0].coordinate).addTo(map),
-        new maplibregl.Marker({ color: '#4D82BC', scale: .65 }).setLngLat(selectedEntries.at(-1)!.coordinate).addTo(map),
+        new maplibregl.Marker({ color: minimal ? '#82AEDA' : '#4D82BC', scale: .65 }).setLngLat(selectedEntries[0].coordinate).addTo(map),
+        new maplibregl.Marker({ color: minimal ? '#82AEDA' : '#4D82BC', scale: .65 }).setLngLat(selectedEntries.at(-1)!.coordinate).addTo(map),
       ]
     }
-  }, [entries, mapReady, selectedRange])
+  }, [entries, mapReady, minimal, selectedRange])
 
   if (coordinates.length < 2) {
     return (
-      <Stack alignItems="center" justifyContent="center" spacing={1} sx={{ height, bgcolor: 'background.default' }}>
+      <Stack alignItems="center" justifyContent="center" spacing={1} sx={{ height, bgcolor: minimal ? 'var(--avento-minimal-surface-subtle)' : 'background.default' }}>
         <LocationOffRoundedIcon color="disabled" fontSize="large" />
         <Typography color="text.secondary">Diese Aktivität enthält keine GPS-Strecke.</Typography>
       </Stack>
     )
   }
 
-  return <Box ref={container} aria-label="Karte der gefahrenen Strecke" sx={{ width: '100%', height }} />
+  return <Box ref={container} role="region" aria-label="Karte der gefahrenen Strecke" data-map-variant={variant} sx={{ width: '100%', height, minHeight: 240, '& .maplibregl-ctrl button:focus-visible': { outline: '2px solid #65C8C1', outlineOffset: 2 } }} />
 }

@@ -61,7 +61,7 @@ export function MinimalDashboardPage() {
   const trendActivities = useQuery({ queryKey: ['activities', 'dashboard-trend', range.from, range.to], queryFn: () => activitiesApi.list({ date_from: range.from, date_to: range.to, limit: 200 }) })
   const insights = useQuery({ queryKey: ['statistics', 'insights', range.from, range.to], queryFn: () => insightsApi.longTerm(range.from, range.to) })
   const lastActivity = recent.data?.items[0]
-  const lastTrack = useQuery({ queryKey: ['activities', lastActivity?.id, 'track'], queryFn: () => activitiesApi.track(lastActivity!.id), enabled: Boolean(lastActivity?.id) })
+  const lastTrack = useQuery({ queryKey: ['activity', lastActivity?.id, 'track'], queryFn: () => activitiesApi.track(lastActivity!.id), enabled: Boolean(lastActivity?.id) })
 
   const weeklyTargetKm = 100
   const weeklyDistanceKm = (week.data?.distance_m ?? 0) / 1000
@@ -159,7 +159,7 @@ export function MinimalDashboardPage() {
                   </Stack>
                 </Box>
                 <Box sx={{ minHeight: { xs: 260, sm: 330 }, bgcolor: '#DDE6E2', '& .maplibregl-map': { minHeight: '100%' } }}>
-                  {lastTrack.isLoading ? <Skeleton variant="rectangular" height="100%" /> : lastTrack.data?.points?.length ? <TrackMap points={lastTrack.data.points} height={330} /> : <Stack height="100%" minHeight={260} alignItems="center" justifyContent="center" color="text.secondary"><RouteRoundedIcon /><Typography variant="body2" sx={{ mt: 1 }}>Keine Routenvorschau verfügbar</Typography></Stack>}
+                  {lastTrack.isLoading ? <Skeleton variant="rectangular" height="100%" /> : lastTrack.data?.points?.length ? <TrackMap points={lastTrack.data.points} height={330} variant="minimal" /> : <Stack height="100%" minHeight={260} alignItems="center" justifyContent="center" color="text.secondary"><RouteRoundedIcon /><Typography variant="body2" sx={{ mt: 1 }}>Keine Routenvorschau verfügbar</Typography></Stack>}
                 </Box>
               </Box>
             </CardActionArea>

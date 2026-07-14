@@ -72,9 +72,9 @@ function Navigation({ onNavigate, onBetaInfo }: { onNavigate?: () => void; onBet
     : navigationItems
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', px: 1.5, py: 2 }}>
+    <Box component="nav" aria-label="Hauptnavigation" sx={{ height: '100%', display: 'flex', flexDirection: 'column', px: 1.5, py: 2 }}>
       <Box sx={{ px: 1, py: .75, mb: 3.5 }}><Brand /></Box>
-      <List aria-label="Hauptnavigation" sx={{ display: 'grid', gap: .25, p: 0 }}>
+      <List sx={{ display: 'grid', gap: .25, p: 0 }}>
         {items.map((item) => {
           const selected = item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path)
           return (
@@ -108,12 +108,12 @@ function Navigation({ onNavigate, onBetaInfo }: { onNavigate?: () => void; onBet
 
 function BetaInfoDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs" aria-labelledby="minimal-beta-title">
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs" aria-labelledby="minimal-beta-title" aria-describedby="minimal-beta-description">
       <DialogTitle id="minimal-beta-title">Minimal UI · Beta</DialogTitle>
-      <DialogContent>
+      <DialogContent id="minimal-beta-description">
         <Stack component="ul" spacing={1.25} sx={{ mt: .5, pl: 2.5, color: 'text.secondary' }}>
           <Typography component="li">Diese Oberfläche ist experimentell.</Typography>
-          <Typography component="li">Einzelne Bereiche verwenden noch die klassische Darstellung.</Typography>
+          <Typography component="li">Alle Trainings- und Einstellungsbereiche verwenden die reduzierte Darstellung.</Typography>
           <Typography component="li">Darstellung und Struktur können sich verändern.</Typography>
           <Typography component="li">Du kannst im Profil jederzeit zur klassischen Oberfläche zurückkehren.</Typography>
         </Stack>

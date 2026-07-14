@@ -16,21 +16,21 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("activities", sa.Column("geography_data", sa.JSON(), nullable=True))
-    op.add_column(
-        "activities",
-        sa.Column("geography_status", sa.String(length=30), nullable=False, server_default="pending"),
-    )
-    op.add_column("activities", sa.Column("geography_updated_at", sa.DateTime(timezone=True), nullable=True))
-    op.create_check_constraint(
-        "ck_activity_geography_status",
-        "activities",
-        "geography_status IN ('pending', 'available', 'unavailable', 'error')",
-    )
+    with op.batch_alter_table("activities") as batch_op:
+        batch_op.add_column(sa.Column("geography_data", sa.JSON(), nullable=True))
+        batch_op.add_column(
+            sa.Column("geography_status", sa.String(length=30), nullable=False, server_default="pending")
+        )
+        batch_op.add_column(sa.Column("geography_updated_at", sa.DateTime(timezone=True), nullable=True))
+        batch_op.create_check_constraint(
+            "ck_activity_geography_status",
+            "geography_status IN ('pending', 'available', 'unavailable', 'error')",
+        )
 
 
 def downgrade() -> None:
-    op.drop_constraint("ck_activity_geography_status", "activities", type_="check")
-    op.drop_column("activities", "geography_updated_at")
-    op.drop_column("activities", "geography_status")
-    op.drop_column("activities", "geography_data")
+    with op.batch_alter_table("activities") as batch_op:
+        batch_op.drop_constraint("ck_activity_geography_status", type_="check")
+        batch_op.drop_column("geography_updated_at")
+        batch_op.drop_column("geography_status")
+        batch_op.drop_column("geography_data")

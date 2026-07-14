@@ -13,6 +13,8 @@ const points: TrackPoint[] = [
     distance_m: 0,
     speed_mps: 5,
     heart_rate_bpm: 100,
+    power_w: 180,
+    cadence_rpm: 82,
   },
   {
     time: '2026-07-10T08:01:00Z',
@@ -22,6 +24,8 @@ const points: TrackPoint[] = [
     distance_m: 1_000,
     speed_mps: 10,
     heart_rate_bpm: 140,
+    power_w: 260,
+    cadence_rpm: 91,
   },
   {
     time: '2026-07-10T08:02:00Z',
@@ -46,6 +50,8 @@ describe('buildAnalysisPoints', () => {
       elapsedSeconds: 60,
       speedKmh: 36,
       heartRateBpm: 140,
+      powerW: 260,
+      cadenceRpm: 91,
     })
   })
 

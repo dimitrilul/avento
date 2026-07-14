@@ -65,6 +65,12 @@ def test_activity_crud_analysis_weather_summary_and_statistics(client: TestClien
     assert stats.json()["distance_m"] == 600
     assert stats.json()["by_month"][0]["month"] == "2026-06"
 
+    filtered_stats = client.get("/api/v1/statistics/overview?type=training", headers=auth)
+    assert filtered_stats.status_code == 200
+    assert filtered_stats.json()["activity_count"] == 1
+    assert filtered_stats.json()["distance_m"] == 600
+    assert client.get("/api/v1/statistics/overview?type=commute", headers=auth).json()["activity_count"] == 0
+
     deleted = client.delete(f"/api/v1/activities/{activity_id}", headers=auth)
     assert deleted.status_code == 204
     assert client.get(f"/api/v1/activities/{activity_id}", headers=auth).status_code == 404

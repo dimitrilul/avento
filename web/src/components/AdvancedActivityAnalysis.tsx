@@ -44,7 +44,7 @@ import { EmptyState } from './States'
 import { TrackMap } from './TrackMap'
 
 type XAxisMode = 'distance' | 'time'
-type SeriesKey = 'elevation' | 'speed' | 'heartRate'
+type SeriesKey = 'elevation' | 'speed' | 'heartRate' | 'power' | 'cadence'
 
 type RouteWeatherPoint = {
   pointIndex: number
@@ -64,6 +64,8 @@ export type AnalysisPoint = {
   altitudeM: number | null
   speedKmh: number | null
   heartRateBpm: number | null
+  powerW: number | null
+  cadenceRpm: number | null
 }
 
 export type SectionMetrics = {
@@ -147,6 +149,8 @@ export function buildAnalysisPoints(points: TrackPoint[]): AnalysisPoint[] {
       altitudeM: isFiniteNumber(point.altitude_m) ? point.altitude_m : null,
       speedKmh,
       heartRateBpm: isFiniteNumber(point.heart_rate_bpm) ? point.heart_rate_bpm : null,
+      powerW: isFiniteNumber(point.power_w) ? point.power_w : null,
+      cadenceRpm: isFiniteNumber(point.cadence_rpm) ? point.cadence_rpm : null,
     }
   })
 }
@@ -295,6 +299,8 @@ const chartDefinitions: Record<SeriesKey, {
   elevation: { title: 'Höhe', dataKey: 'altitudeM', unit: 'm', emptyTitle: 'Keine Höhendaten' },
   speed: { title: 'Geschwindigkeit', dataKey: 'speedKmh', unit: 'km/h', emptyTitle: 'Keine Geschwindigkeitsdaten' },
   heartRate: { title: 'Herzfrequenz', dataKey: 'heartRateBpm', unit: 'bpm', emptyTitle: 'Keine Herzfrequenzdaten' },
+  power: { title: 'Leistung', dataKey: 'powerW', unit: 'W', emptyTitle: 'Keine Leistungsdaten' },
+  cadence: { title: 'Kadenz', dataKey: 'cadenceRpm', unit: 'rpm', emptyTitle: 'Keine Kadenzdaten' },
 }
 
 function AnalysisChart({ data, mode, series, color, selection, kilometerMarks, activeIndex, onHover }: AnalysisChartProps) {
@@ -490,13 +496,17 @@ function dataPoint(index: number, visiblePoints: AnalysisPoint[]) {
   ), visiblePoints[0])
 }
 
-function CurrentPointCard({ point }: { point: AnalysisPoint | null }) {
+function CurrentPointCard({ point, extended = false }: { point: AnalysisPoint | null; extended?: boolean }) {
   const values = [
     ['Position', point ? formatDistance(point.distanceM) : '–'],
     ['Zeit', point ? formatElapsed(point.elapsedSeconds) : '–'],
     ['Höhe', formatElevation(point?.altitudeM)],
     ['Geschwindigkeit', formatSpeed(point?.speedKmh)],
     ['Herzfrequenz', formatHeartRate(point?.heartRateBpm)],
+    ...(extended ? [
+      ['Leistung', point?.powerW == null ? '–' : `${Math.round(point.powerW).toLocaleString('de-DE')} W`],
+      ['Kadenz', point?.cadenceRpm == null ? '–' : `${Math.round(point.cadenceRpm).toLocaleString('de-DE')} rpm`],
+    ] : []),
   ]
   return (
     <Card sx={{ height: '100%' }}>
@@ -533,13 +543,19 @@ function SectionMetric({ label, value, icon }: { label: string; value: string; i
   )
 }
 
-export function AdvancedActivityAnalysis({ points, weather }: { points: TrackPoint[]; weather?: WeatherData | null }) {
+export function AdvancedActivityAnalysis({ points, weather, minimal = false }: { points: TrackPoint[]; weather?: WeatherData | null; minimal?: boolean }) {
   const theme = useTheme()
   const analysisPoints = useMemo(() => buildAnalysisPoints(points), [points])
   const chartPoints = useMemo(() => sampleForCharts(analysisPoints), [analysisPoints])
   const routeWeather = useMemo(() => buildRouteWeatherPoints(weather, points, analysisPoints), [weather, points, analysisPoints])
   const [axisMode, setAxisMode] = useState<XAxisMode>('distance')
-  const [visibleSeries, setVisibleSeries] = useState<SeriesKey[]>(['elevation', 'speed', 'heartRate'])
+  const availableExtendedSeries = useMemo<SeriesKey[]>(() => [
+    ...(analysisPoints.some((point) => point.powerW != null) ? ['power' as const] : []),
+    ...(analysisPoints.some((point) => point.cadenceRpm != null) ? ['cadence' as const] : []),
+  ], [analysisPoints])
+  const [visibleSeries, setVisibleSeries] = useState<SeriesKey[]>(() => minimal
+    ? ['elevation', 'speed', 'heartRate', ...availableExtendedSeries]
+    : ['elevation', 'speed', 'heartRate'])
   const [zoomRange, setZoomRange] = useState<[number, number]>([0, Math.max(0, chartPoints.length - 1)])
   const [selection, setSelection] = useState<[number, number] | null>(null)
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
@@ -574,6 +590,8 @@ export function AdvancedActivityAnalysis({ points, weather }: { points: TrackPoi
     elevation: theme.palette.chart.lime,
     speed: theme.palette.chart.blue,
     heartRate: theme.palette.chart.coral,
+    power: theme.palette.chart.amber,
+    cadence: theme.palette.chart.teal,
   }
 
   const useVisibleAreaAsSection = () => {
@@ -593,9 +611,10 @@ export function AdvancedActivityAnalysis({ points, weather }: { points: TrackPoi
             showKilometerMarkers
             onPointHover={setActiveIndex}
             height={{ xs: 390, md: 520 }}
+            variant={minimal ? 'minimal' : 'classic'}
           />
         </Card>
-        <CurrentPointCard point={activePoint} />
+        <CurrentPointCard point={activePoint} extended={minimal} />
       </Box>
 
       <Card>
@@ -627,6 +646,8 @@ export function AdvancedActivityAnalysis({ points, weather }: { points: TrackPoi
                 <ToggleButton value="elevation">Höhe</ToggleButton>
                 <ToggleButton value="speed">Tempo</ToggleButton>
                 <ToggleButton value="heartRate">Puls</ToggleButton>
+                {minimal && availableExtendedSeries.includes('power') && <ToggleButton value="power">Leistung</ToggleButton>}
+                {minimal && availableExtendedSeries.includes('cadence') && <ToggleButton value="cadence">Kadenz</ToggleButton>}
               </ToggleButtonGroup>
             </Stack>
           </Stack>

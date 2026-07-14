@@ -52,7 +52,7 @@ export function capturedAtForApi(value: string) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 
-export function ActivityPhotoGallery({ activityId, trackPoints }: { activityId: string; trackPoints: TrackPoint[] }) {
+export function ActivityPhotoGallery({ activityId, trackPoints, mapVariant = 'classic' }: { activityId: string; trackPoints: TrackPoint[]; mapVariant?: 'classic' | 'minimal' }) {
   const client = useQueryClient()
   const [uploadOpen, setUploadOpen] = useState(false)
   const [editPhoto, setEditPhoto] = useState<ActivityPhoto | null>(null)
@@ -156,7 +156,7 @@ export function ActivityPhotoGallery({ activityId, trackPoints }: { activityId: 
               </Box>
             </Stack>
           </CardContent>
-          <TrackMap points={trackPoints} markers={markers} height={{ xs: 280, md: 340 }} />
+          <TrackMap points={trackPoints} markers={markers} height={{ xs: 280, md: 340 }} variant={mapVariant} />
         </Card>
       )}
 

@@ -538,6 +538,7 @@ def statistics_overview(
     date_from: date | None = None,
     date_to: date | None = None,
     granularity: str = Query(default="auto", pattern=r"^(auto|day|week|month)$"),
+    type: str | None = Query(default=None, max_length=50),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> StatisticsOverview:
@@ -547,12 +548,16 @@ def statistics_overview(
     if end.year >= 9999:
         raise HTTPException(status_code=422, detail="Das Enddatum liegt außerhalb des unterstützten Bereichs.")
     start = date_from
+    activity_type = type.strip().lower() if type else None
     if start is None:
+        earliest_conditions = [
+            Activity.user_id == current_user.id,
+            Activity.started_at < _local_midnight(end + timedelta(days=1), timezone_name),
+        ]
+        if activity_type:
+            earliest_conditions.append(Activity.activity_type == activity_type)
         earliest = db.scalar(
-            select(func.min(Activity.started_at)).where(
-                Activity.user_id == current_user.id,
-                Activity.started_at < _local_midnight(end + timedelta(days=1), timezone_name),
-            )
+            select(func.min(Activity.started_at)).where(*earliest_conditions)
         )
         start = _local_date(earliest, timezone_name) if earliest else end
     if end < start:
@@ -564,6 +569,8 @@ def statistics_overview(
         Activity.started_at >= _local_midnight(start, timezone_name),
         Activity.started_at < _local_midnight(end + timedelta(days=1), timezone_name),
     ]
+    if activity_type:
+        current_conditions.append(Activity.activity_type == activity_type)
     span = (end - start).days + 1
     if span > 36_525:
         raise HTTPException(status_code=422, detail="Der Statistikzeitraum darf höchstens 100 Jahre umfassen.")
@@ -578,6 +585,8 @@ def statistics_overview(
         Activity.started_at >= _local_midnight(previous_from, timezone_name),
         Activity.started_at < _local_midnight(previous_to + timedelta(days=1), timezone_name),
     ]
+    if activity_type:
+        previous_conditions.append(Activity.activity_type == activity_type)
     activities = db.scalars(select(Activity).where(*current_conditions).order_by(Activity.started_at)).all()
     previous = db.scalars(select(Activity).where(*previous_conditions).order_by(Activity.started_at)).all()
     return StatisticsOverview.model_validate(

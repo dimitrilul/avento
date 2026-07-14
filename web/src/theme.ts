@@ -154,6 +154,18 @@ export function createMinimalTheme() {
       MuiIconButton: {
         styleOverrides: { root: { '&:focus-visible': { outline: '2px solid #65C8C1', outlineOffset: 3 } } },
       },
+      MuiLink: {
+        styleOverrides: { root: { '&:focus-visible': { outline: '2px solid #65C8C1', outlineOffset: 3, borderRadius: 4 } } },
+      },
+      MuiTab: {
+        styleOverrides: { root: { minHeight: 44, '&:focus-visible': { outline: '2px solid #65C8C1', outlineOffset: -2 } } },
+      },
+      MuiToggleButton: {
+        styleOverrides: { root: { minHeight: 40, '&:focus-visible': { outline: '2px solid #65C8C1', outlineOffset: -2 } } },
+      },
+      MuiMenuItem: {
+        styleOverrides: { root: { '&:focus-visible': { outline: '2px solid #65C8C1', outlineOffset: -2 } } },
+      },
       MuiCard: {
         defaultProps: { elevation: 0 },
         styleOverrides: {
@@ -165,7 +177,13 @@ export function createMinimalTheme() {
         },
       },
       MuiDialog: {
-        styleOverrides: { paper: { backgroundImage: 'none', border: '1px solid rgba(216,230,227,.1)' } },
+        styleOverrides: {
+          paper: {
+            backgroundImage: 'none',
+            border: '1px solid rgba(216,230,227,.1)',
+            '@media (max-width: 420px)': { margin: 12, width: 'calc(100% - 24px)', maxHeight: 'calc(100% - 24px)' },
+          },
+        },
       },
       MuiListItemButton: {
         styleOverrides: { root: { '&:focus-visible': { outline: '2px solid #65C8C1', outlineOffset: -2 } } },

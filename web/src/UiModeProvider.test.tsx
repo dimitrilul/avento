@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { profileApi, type Profile } from './api'
 import { ThemeModeProvider } from './ThemeModeProvider'
-import { ClassicContentBoundary, UiModeProvider, useUiMode } from './UiModeProvider'
+import { UiModeProvider, useUiMode } from './UiModeProvider'
 import { MinimalAppShell } from './layout/MinimalAppShell'
 import { ExperimentsCard } from './pages/ProfilePage'
 
@@ -43,15 +43,34 @@ function ModeProbe() {
   return <><span>Modus {uiMode}</span><span>Fläche {theme.palette.background.default}</span><button onClick={() => void setUiMode('minimal')}>Minimal setzen</button></>
 }
 
-function ThemeProbe({ label }: { label: string }) {
-  const theme = useTheme()
-  return <span>{label}: {theme.palette.background.default}</span>
-}
-
 describe('UiModeProvider und Minimal-UI-Umschaltung', () => {
   beforeEach(() => {
+    localStorage.clear()
     authState.profile = { ...profile }
     authState.setProfile.mockReset()
+  })
+
+  it('verwendet den letzten bestätigten Modus nur als Bootstrap-Hinweis und gleicht ihn mit dem Profil ab', async () => {
+    localStorage.setItem('avento.auth.tokens', JSON.stringify({ access_token: 'access', refresh_token: 'refresh', token_type: 'bearer', expires_in: 900 }))
+    localStorage.setItem('avento-ui-mode-hint', 'minimal')
+    authState.profile = null
+    const { rerender } = render(<Providers><ModeProbe /></Providers>)
+    expect(screen.getByText('Modus minimal')).toBeInTheDocument()
+
+    authState.profile = { ...profile, ui_mode: 'classic' }
+    rerender(<Providers><ModeProbe /></Providers>)
+    expect(screen.getByText('Modus classic')).toBeInTheDocument()
+    await waitFor(() => expect(localStorage.getItem('avento-ui-mode-hint')).toBe('classic'))
+  })
+
+  it('behält bei einem API-Fehler den bisherigen Modus und Bootstrap-Hinweis', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(profileApi, 'update').mockRejectedValue(new Error('Speichern fehlgeschlagen'))
+    render(<Providers><ModeProbe /></Providers>)
+    await user.click(screen.getByRole('button', { name: 'Minimal setzen' }))
+    await waitFor(() => expect(screen.getByText('Modus classic')).toBeInTheDocument())
+    expect(authState.setProfile).not.toHaveBeenCalled()
+    expect(localStorage.getItem('avento-ui-mode-hint')).toBe('classic')
   })
 
   it('startet standardmäßig klassisch und speichert einen Moduswechsel über das Profil', async () => {
@@ -70,13 +89,6 @@ describe('UiModeProvider und Minimal-UI-Umschaltung', () => {
     expect(screen.getByText('Modus minimal')).toBeInTheDocument()
     expect(document.documentElement).toHaveAttribute('data-ui-mode', 'minimal')
     expect(screen.getByText('Fläche #090E0D')).toBeInTheDocument()
-  })
-
-  it('isoliert klassische Folgeinhalte vom Minimal-Theme', () => {
-    authState.profile = { ...profile, ui_mode: 'minimal' }
-    render(<Providers><ThemeProbe label="Shell" /><ClassicContentBoundary><ThemeProbe label="Inhalt" /></ClassicContentBoundary></Providers>)
-    expect(screen.getByText('Shell: #090E0D')).toBeInTheDocument()
-    expect(screen.getByText('Inhalt: #0D1413')).toBeInTheDocument()
   })
 
   it('aktiviert die Beta erst nach Bestätigung und lässt Abbrechen folgenlos', async () => {

@@ -54,6 +54,14 @@ interface OneTimeSecret {
 }
 
 export function McpAdminPage() {
+  return <McpAdminContent minimal={false} />
+}
+
+export function MinimalMcpAdminPage() {
+  return <McpAdminContent minimal />
+}
+
+export function useMcpAdminController() {
   const { profile } = useAuth()
   const client = useQueryClient()
   const [createOpen, setCreateOpen] = useState(false)
@@ -80,10 +88,24 @@ export function McpAdminPage() {
   const rotate = useMutation({ mutationFn: (clientId: string) => mcpAdminApi.rotateSecret(clientId) })
   const revokeTokens = useMutation({ mutationFn: (clientId: string) => mcpAdminApi.revokeTokens(clientId) })
 
+  return {
+    profile, createOpen, setCreateOpen, editClient, setEditClient, tokenClient, setTokenClient,
+    prefilledSecret, setPrefilledSecret, oneTimeSecret, setOneTimeSecret, confirmDeactivate,
+    setConfirmDeactivate, clients, audit, refreshClients, create, update, rotate, revokeTokens,
+  }
+}
+
+function McpAdminContent({ minimal }: { minimal: boolean }) {
+  const {
+    profile, createOpen, setCreateOpen, editClient, setEditClient, tokenClient, setTokenClient,
+    prefilledSecret, setPrefilledSecret, oneTimeSecret, setOneTimeSecret, confirmDeactivate,
+    setConfirmDeactivate, clients, audit, refreshClients, create, update, rotate, revokeTokens,
+  } = useMcpAdminController()
+
   if (!profile?.is_admin) {
     return (
       <>
-        <PageHeader eyebrow="ADMINISTRATION" title="MCP-Clients" description="Verwaltung externer, streng eingeschränkter Datenzugriffe." />
+        {minimal ? <MinimalMcpHeader description="Verwaltung externer, streng eingeschränkter Datenzugriffe." /> : <PageHeader eyebrow="ADMINISTRATION" title="MCP-Clients" description="Verwaltung externer, streng eingeschränkter Datenzugriffe." />}
         <Alert severity="warning">Dieser Bereich ist Administratoren vorbehalten.</Alert>
       </>
     )
@@ -137,12 +159,12 @@ export function McpAdminPage() {
 
   return (
     <>
-      <PageHeader
+      {minimal ? <MinimalMcpHeader action={<Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => { create.reset(); setCreateOpen(true) }}>Client anlegen</Button>} /> : <PageHeader
         eyebrow="ADMINISTRATION"
         title="MCP-Clients"
         description="Vergib minimale Scopes, erzeuge kurzlebige Zugriffstoken und prüfe jeden MCP-Aufruf im Audit-Log."
         action={<Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => { create.reset(); setCreateOpen(true) }}>Client anlegen</Button>}
-      />
+      />}
 
       <Alert severity="info" icon={<SecurityRoundedIcon />} sx={{ mb: 3 }}>
         Client-Secrets und Zugriffstoken werden nur einmal angezeigt und weder im Browser noch in Avento im Klartext gespeichert.
@@ -156,7 +178,7 @@ export function McpAdminPage() {
         <Card><EmptyState title="Noch keine MCP-Clients" description="Lege einen Client an und erteile nur die Scopes, die seine Integration wirklich benötigt." action={<Button variant="contained" onClick={() => setCreateOpen(true)}>Ersten Client anlegen</Button>} /></Card>
       )}
       {clients.data && clients.data.length > 0 && (
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: 'repeat(2, 1fr)' }, gap: 2 }}>
+        <Box component="section" aria-label="MCP-Clients" sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', xl: 'repeat(2, minmax(0, 1fr))' }, gap: 2 }}>
           {clients.data.map((mcpClient) => (
             <ClientCard
               key={mcpClient.client_id}
@@ -183,7 +205,7 @@ export function McpAdminPage() {
           {audit.data && audit.data.length === 0 && <EmptyState title="Noch keine Aufrufe" description="Sobald ein MCP-Client ein Werkzeug verwendet, erscheint der Aufruf hier." />}
           {audit.data && audit.data.length > 0 && <Stack divider={<Box sx={{ borderTop: '1px solid', borderColor: 'divider' }} />}>{audit.data.map((entry, index) => (
             <Box key={`${entry.client_id ?? 'unknown'}-${entry.created_at}-${index}`} sx={{ px: { xs: 2, sm: 2.5 }, py: 1.75, display: 'grid', gridTemplateColumns: { xs: '1fr auto', md: 'minmax(160px, .7fr) minmax(160px, 1fr) 120px 100px 160px' }, gap: 1, alignItems: 'center' }}>
-              <Box sx={{ minWidth: 0 }}><Typography variant="body2" fontWeight={750} noWrap>{entry.tool_name || entry.method}</Typography><Typography variant="caption" color="text.secondary" noWrap>{entry.client_id || 'Unbekannter Client'}</Typography></Box>
+              <Box sx={{ minWidth: 0 }}><Typography variant="body2" fontWeight={750} noWrap>{entry.tool_name || entry.method}</Typography><Typography variant="caption" color="text.secondary" noWrap>{entry.client_id || 'Unbekannter Client'}</Typography>{minimal && <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'block', md: 'none' }, mt: .25 }}>{entry.method} · {entry.duration_ms} ms · {formatDateTime(entry.created_at)}</Typography>}</Box>
               <Chip size="small" color={entry.outcome === 'success' || entry.outcome === 'accepted' ? 'success' : 'error'} variant="outlined" label={entry.outcome} />
               <Typography variant="body2" sx={{ display: { xs: 'none', md: 'block' } }}>{entry.method}</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ display: { xs: 'none', md: 'block' } }}>{entry.duration_ms} ms</Typography>
@@ -239,6 +261,10 @@ export function McpAdminPage() {
       </Dialog>
     </>
   )
+}
+
+function MinimalMcpHeader({ description = 'Vergib minimale Scopes, erzeuge kurzlebige Zugriffstoken und prüfe jeden MCP-Aufruf im Audit-Log.', action }: { description?: string; action?: React.ReactNode }) {
+  return <Stack component="header" direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'flex-end' }} gap={2.5} sx={{ mb: { xs: 4, md: 6 }, pt: { md: 2 } }}><Box sx={{ maxWidth: 760 }}><Typography variant="overline" color="primary.main">Administration</Typography><Typography component="h1" variant="h1" sx={{ mt: 1 }}>MCP-Zugänge</Typography><Typography color="text.secondary" sx={{ mt: 1.5, maxWidth: 680 }}>{description}</Typography></Box>{action}</Stack>
 }
 
 function ClientCard({ client, busy, onEdit, onToken, onToggle, onRotate, onRevokeTokens }: { client: McpClient; busy: boolean; onEdit: () => void; onToken: () => void; onToggle: () => void; onRotate: () => void; onRevokeTokens: () => void }) {
@@ -347,8 +373,9 @@ function TokenDialog({ client, initialSecret, onClose, onCreated }: { client: Mc
 
 export function OneTimeSecretDialog({ secret, onClose, onRequestToken }: { secret: OneTimeSecret | null; onClose: () => void; onRequestToken?: () => void }) {
   const [copied, setCopied] = useState(false)
-  useEffect(() => setCopied(false), [secret])
-  async function copy() { if (secret) { await navigator.clipboard.writeText(secret.value); setCopied(true) } }
+  const [copyError, setCopyError] = useState(false)
+  useEffect(() => { setCopied(false); setCopyError(false) }, [secret])
+  async function copy() { if (secret) { try { await navigator.clipboard.writeText(secret.value); setCopied(true); setCopyError(false) } catch { setCopyError(true) } } }
   return (
     <Dialog open={Boolean(secret)} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>{secret?.title}</DialogTitle>
@@ -358,6 +385,7 @@ export function OneTimeSecretDialog({ secret, onClose, onRequestToken }: { secre
         <TextField label={secret?.label} value={secret?.value ?? ''} multiline minRows={3} slotProps={{ input: { readOnly: true } }} sx={{ '& textarea': { fontFamily: 'monospace', fontSize: '.82rem', overflowWrap: 'anywhere' } }} />
         {secret?.expiresIn != null && <Typography variant="body2" color="text.secondary">Gültigkeit: {Math.round(secret.expiresIn / 60)} Minuten · Scopes: {secret.scopes?.join(', ') || 'keine'}</Typography>}
         <Button variant="outlined" startIcon={<ContentCopyRoundedIcon />} onClick={() => void copy()}>{copied ? 'Kopiert' : 'In die Zwischenablage kopieren'}</Button>
+        <Box role="status" aria-live="polite"><Typography variant="caption" color={copyError ? 'error' : 'text.secondary'}>{copyError ? 'Kopieren war nicht möglich. Markiere das Geheimnis und kopiere es manuell.' : copied ? 'Das Geheimnis wurde in die Zwischenablage kopiert.' : ''}</Typography></Box>
       </Stack></DialogContent>
       <DialogActions sx={{ px: 3, pb: 3 }}>{onRequestToken && <Button startIcon={<VpnKeyRoundedIcon />} onClick={onRequestToken}>Direkt Token anfordern</Button>}<Box sx={{ flex: 1 }} /><Button variant="contained" onClick={onClose}>Ich habe es sicher gespeichert</Button></DialogActions>
     </Dialog>
