@@ -30,9 +30,17 @@ def test_bootstrap_login_refresh_rotation_and_profile(client: TestClient):
     assert profile.status_code == 200
     assert profile.json()["is_admin"] is True
     assert len(profile.json()["hr_zones"]) == 5
+    assert profile.json()["ui_mode"] == "classic"
     updated = client.patch("/api/v1/profile", headers=headers, json={"hr_max": 200, "hr_rest": 55})
     assert updated.status_code == 200
     assert updated.json()["hr_max"] == 200
+
+    minimal = client.patch("/api/v1/profile", headers=headers, json={"ui_mode": "minimal"})
+    assert minimal.status_code == 200
+    assert minimal.json()["ui_mode"] == "minimal"
+    assert client.get("/api/v1/profile", headers=headers).json()["ui_mode"] == "minimal"
+    invalid = client.patch("/api/v1/profile", headers=headers, json={"ui_mode": "neon"})
+    assert invalid.status_code == 422
 
 
 def test_bootstrap_code_and_invitation_registration(client: TestClient):

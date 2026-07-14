@@ -44,6 +44,7 @@ def _profile_response(user: User) -> ProfileResponse:
         hr_rest=user.hr_rest,
         hr_zones=user.hr_zones or [],
         training_goals=user.training_goals or [],
+        ui_mode=user.ui_mode or "classic",
         avatar_data_url=_avatar_data_url(user),
     )
 
@@ -110,6 +111,8 @@ def update_profile(
         current_user.hr_zones = serialized
     if values.get("training_goals") is not None:
         current_user.training_goals = values["training_goals"]
+    if values.get("ui_mode") is not None:
+        current_user.ui_mode = values["ui_mode"]
     if current_user.hr_rest >= current_user.hr_max:
         raise HTTPException(status_code=422, detail="Der Ruhepuls muss unter dem Maximalpuls liegen.")
     if {"hr_rest", "hr_max", "hr_zones", "training_goals"}.intersection(values):

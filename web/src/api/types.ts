@@ -7,6 +7,8 @@ export interface HeartRateZone {
   color: string
 }
 
+export type UiMode = 'classic' | 'minimal'
+
 export interface Profile {
   id: string
   email: string
@@ -16,6 +18,7 @@ export interface Profile {
   hr_rest: number | null
   hr_zones: HeartRateZone[]
   training_goals: string[]
+  ui_mode: UiMode
   avatar_data_url?: string | null
 }
 

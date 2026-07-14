@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
@@ -88,6 +88,7 @@ class ProfileResponse(BaseModel):
     hr_rest: int
     hr_zones: list[HeartRateZone]
     training_goals: list[str] = Field(default_factory=list)
+    ui_mode: Literal["classic", "minimal"] = "classic"
     avatar_data_url: str | None = None
 
 
@@ -97,6 +98,7 @@ class ProfileUpdate(BaseModel):
     hr_rest: int | None = Field(default=None, ge=30, le=150)
     hr_zones: list[HeartRateZone] | None = Field(default=None, min_length=1, max_length=10)
     training_goals: list[str] | None = Field(default=None, max_length=12)
+    ui_mode: Literal["classic", "minimal"] | None = None
 
     @field_validator("training_goals")
     @classmethod

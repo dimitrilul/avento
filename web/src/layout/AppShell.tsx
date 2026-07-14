@@ -32,6 +32,8 @@ import { useAuth } from '../auth/AuthContext'
 import { Brand } from '../components/Brand'
 import { ThemeModeToggle } from '../components/ThemeModeToggle'
 import { UploadDialog } from '../components/UploadDialog'
+import { useUiMode } from '../UiModeProvider'
+import { MinimalAppShell } from './MinimalAppShell'
 
 const drawerWidth = 248
 const nav = [
@@ -108,7 +110,7 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
   )
 }
 
-export function AppShell() {
+function ClassicAppShell() {
   const theme = useTheme()
   const desktop = useMediaQuery(theme.breakpoints.up('lg'))
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -149,4 +151,9 @@ export function AppShell() {
       <UploadDialog open={uploadOpen} onClose={() => setUploadOpen(false)} />
     </Box>
   )
+}
+
+export function AppShell() {
+  const { minimal } = useUiMode()
+  return minimal ? <MinimalAppShell /> : <ClassicAppShell />
 }

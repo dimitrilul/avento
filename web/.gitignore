@@ -3,3 +3,6 @@ dist
 .env
 *.local
 coverage
+playwright-report
+test-results
+e2e/.auth

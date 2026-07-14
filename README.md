@@ -4,6 +4,8 @@
 
 Aktivitäten, Rekorde sowie Wochen-, Monats- und Jahresrückblicke lassen sich im Web und in der Android-App als konfigurierbare Share-Grafiken exportieren. Die Architektur der sechs Vorlagen und der Karten-/Foto-Pipeline ist in [docs/overlay-engine.md](docs/overlay-engine.md) beschrieben.
 
+Die Web-App enthält außerdem eine optional aktivierbare, Dark-only **Minimal UI (Beta)** für Navigation, Dashboard und Meilensteine. Architektur, Persistenz, Tests und visuelle Referenzen sind in [docs/minimal-ui-beta.md](docs/minimal-ui-beta.md) dokumentiert.
+
 <p align="center">
   <strong>Deine Fahrten. Deine Daten. Dein Fortschritt.</strong><br>
   Private Radfahranalyse mit Strecken, Wetter, persönlichen Rekorden und optionalem KI-Coach.

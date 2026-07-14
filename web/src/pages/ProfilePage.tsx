@@ -7,7 +7,7 @@ import PersonAddRoundedIcon from '@mui/icons-material/PersonAddRounded'
 import LockResetRoundedIcon from '@mui/icons-material/LockResetRounded'
 import PasswordRoundedIcon from '@mui/icons-material/PasswordRounded'
 import SaveRoundedIcon from '@mui/icons-material/SaveRounded'
-import { Alert, Autocomplete, Avatar, Box, Button, Card, CardContent, Divider, Stack, TextField, Typography } from '@mui/material'
+import { Alert, Autocomplete, Avatar, Box, Button, Card, CardContent, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControlLabel, Stack, Switch, TextField, Typography } from '@mui/material'
 import { useMutation } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { authApi, profileApi, type HeartRateZone } from '../api'
@@ -15,6 +15,7 @@ import { useAuth } from '../auth/AuthContext'
 import { AvatarCropDialog } from '../components/AvatarCropDialog'
 import { PageHeader } from '../components/PageHeader'
 import { errorMessage, formatDateTime } from '../utils/format'
+import { useUiMode } from '../UiModeProvider'
 
 export function ProfilePage() {
   const { profile, setProfile, logout } = useAuth()
@@ -88,6 +89,7 @@ export function ProfilePage() {
         <Button variant="contained" startIcon={<SaveRoundedIcon />} disabled={!name.trim() || save.isPending} onClick={() => save.mutate()} sx={{ alignSelf: 'flex-start' }}>{save.isPending ? 'Wird gespeichert …' : 'Änderungen speichern'}</Button>
       </Stack></CardContent></Card>
       <Stack spacing={2.5}>
+        <ExperimentsCard />
         <Card><CardContent><Typography variant="h3">Konto</Typography><Typography color="text.secondary" sx={{ my: 2 }}>Du bist als {profile?.email} angemeldet.</Typography><Button color="error" variant="outlined" startIcon={<LogoutRoundedIcon />} onClick={() => void signOut()}>Abmelden</Button></CardContent></Card>
         <SecurityCard />
         <ChangePasswordCard />
@@ -97,6 +99,61 @@ export function ProfilePage() {
     </Box>
     <AvatarCropDialog open={Boolean(avatarFile)} file={avatarFile} busy={uploadAvatar.isPending} onClose={() => setAvatarFile(null)} onConfirm={(file) => uploadAvatar.mutate(file)} />
   </>
+}
+
+export function ExperimentsCard() {
+  const { minimal, pending, error, setUiMode, clearError } = useUiMode()
+  const [confirmOpen, setConfirmOpen] = useState(false)
+
+  async function confirmActivation() {
+    const changed = await setUiMode('minimal')
+    if (changed) setConfirmOpen(false)
+  }
+
+  return (
+    <>
+      <Card component="section" aria-labelledby="experiments-title">
+        <CardContent>
+          <Typography variant="overline" color="text.secondary">Einstellungen</Typography>
+          <Typography id="experiments-title" variant="h3">Experimente</Typography>
+          <FormControlLabel
+            label="Minimal UI (Beta)"
+            labelPlacement="start"
+            control={(
+              <Switch
+                checked={minimal}
+                disabled={pending}
+                inputProps={{ 'aria-describedby': 'minimal-ui-description' }}
+                onChange={(_, checked) => {
+                  clearError()
+                  if (checked) setConfirmOpen(true)
+                  else void setUiMode('classic')
+                }}
+              />
+            )}
+            sx={{ justifyContent: 'space-between', width: '100%', ml: 0, mt: 1.5, '& .MuiFormControlLabel-label': { fontWeight: 720 } }}
+          />
+          <Typography id="minimal-ui-description" variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.7 }}>
+            Ein experimenteller Entwurf einer ruhigeren, minimalistischeren und hochwertigeren Benutzeroberfläche. Diese Version befindet sich noch in der Entwicklung. Einzelne Bereiche können unvollständig sein oder sich verändern.
+          </Typography>
+          {Boolean(error) && <Alert severity="error" sx={{ mt: 2 }}>{errorMessage(error)}</Alert>}
+        </CardContent>
+      </Card>
+      <Dialog open={confirmOpen} onClose={pending ? undefined : () => setConfirmOpen(false)} fullWidth maxWidth="sm" aria-labelledby="minimal-ui-confirm-title">
+        <DialogTitle id="minimal-ui-confirm-title">Minimal UI aktivieren?</DialogTitle>
+        <DialogContent>
+          <Typography color="text.secondary" sx={{ lineHeight: 1.75 }}>
+            Diese Oberfläche befindet sich in einer Beta-Phase. Einzelne Bereiche können unvollständig sein, Darstellungsfehler enthalten oder sich in zukünftigen Versionen deutlich verändern. Du kannst jederzeit zur klassischen Oberfläche zurückkehren.
+          </Typography>
+          {Boolean(error) && <Alert severity="error" sx={{ mt: 2 }}>{errorMessage(error)}</Alert>}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button onClick={() => setConfirmOpen(false)} disabled={pending}>Abbrechen</Button>
+          <Button variant="contained" onClick={() => void confirmActivation()} disabled={pending} autoFocus>{pending ? 'Wird aktiviert …' : 'Beta aktivieren'}</Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  )
 }
 
 function SecurityCard() {
