@@ -1,7 +1,7 @@
 """Add the user-selectable interface mode.
 
 Revision ID: 0010
-Revises: 0009
+Revises: 0009_google_health
 """
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = "0010"
-down_revision = "0009"
+down_revision = "0009_google_health"
 branch_labels = None
 depends_on = None
 
