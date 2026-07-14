@@ -28,6 +28,7 @@ import { availableMetrics } from './content'
 import { AVENTO_SOLID_COLORS } from './design'
 import { downloadPng, exportOverlayPng } from './exportPng'
 import { OverlayCanvas } from './OverlayCanvas'
+import { photoBlobToDataUrl } from './photoDataUrl'
 import { hasRoute } from './RouteArtwork'
 import { OVERLAY_TEMPLATES, templateById } from './templates'
 import {
@@ -42,22 +43,19 @@ import {
   type ShareContent,
 } from './types'
 
-function usePhotoObjectUrl(photo: ActivityPhoto | null) {
+function usePhotoDataUrl(photo: ActivityPhoto | null) {
   const [url, setUrl] = useState<string | null>(null)
   useEffect(() => {
     let active = true
-    let objectUrl: string | null = null
     setUrl(null)
     if (photo) {
-      activityPhotosApi.file(photo).then((blob) => {
+      activityPhotosApi.file(photo).then(photoBlobToDataUrl).then((dataUrl) => {
         if (!active) return
-        objectUrl = URL.createObjectURL(blob)
-        setUrl(objectUrl)
+        setUrl(dataUrl)
       }).catch(() => setUrl(null))
     }
     return () => {
       active = false
-      if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
   }, [photo])
   return url
@@ -94,7 +92,7 @@ export function ShareStudioDialog({ open, onClose, content }: { open: boolean; o
   })
   const photos = content.kind === 'activity' ? (content.photos ?? photoQuery.data?.items ?? []) : []
   const selectedPhoto = photos.find((photo) => photo.id === config.photoId) ?? photos[0] ?? null
-  const photoUrl = usePhotoObjectUrl(config.background === 'photo' ? selectedPhoto : null)
+  const photoUrl = usePhotoDataUrl(config.background === 'photo' ? selectedPhoto : null)
   const routeAvailable = content.kind === 'activity' && hasRoute(content.points)
   const metrics = useMemo(() => availableMetrics(content), [content])
 

@@ -71,7 +71,7 @@ export function ShareMap({
         {showRoute && <RouteArtwork points={points} color={palette.accent} halo={palette.routeHalo} accent={palette.achievement} achievement={achievement} />}
       </Box>
       {snapshot && <Box component="img" src={snapshot} alt="" sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', filter: theme === 'dark' ? 'brightness(.62) saturate(.7) contrast(1.1)' : 'saturate(.72) brightness(1.03)' }} />}
-      <Box ref={container} sx={{ position: 'absolute', inset: 0, opacity: 0, pointerEvents: 'none' }} />
+      <Box ref={container} data-overlay-export-ignore="true" sx={{ position: 'absolute', inset: 0, opacity: 0, pointerEvents: 'none' }} />
       {snapshot && <Box sx={{ position: 'absolute', right: 8, bottom: 5, px: .5, borderRadius: .5, bgcolor: 'rgba(255,255,255,.65)', color: '#253330', fontSize: 6, lineHeight: 1.4 }}>© OpenFreeMap · © OpenStreetMap</Box>}
     </Box>
   )
