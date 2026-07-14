@@ -148,6 +148,25 @@ erzeugte Debug-APK liegt unter
 
 </details>
 
+## Optionale Ortserkennung mit LocationIQ
+
+Orts-Meilensteine sind standardmäßig deaktiviert, weil dafür wenige, entlang
+der Route verteilte Koordinaten an einen Geocoding-Dienst übertragen werden.
+Für die bewusste Aktivierung über den europäischen LocationIQ-Endpunkt werden
+in `.env` folgende Werte gesetzt:
+
+```dotenv
+REVERSE_GEOCODING_PROVIDER=locationiq
+REVERSE_GEOCODING_BASE_URL=https://eu1.locationiq.com/v1
+LOCATIONIQ_API_KEY=dein-locationiq-token
+```
+
+Anschließend wird der Backend-Container neu erstellt. Neue Fahrten erhalten
+ihre Ortsdaten automatisch und unabhängig von der Wetterabfrage. Bereits
+gespeicherte Fahrten lassen sich unter „Meilensteine“ in kleinen, fortsetzbaren
+Batches verarbeiten. Der Token bleibt ausschließlich im Backend und darf nicht
+in Logs, Screenshots oder Support-Anfragen kopiert werden.
+
 ## Read-only-MCP
 
 Avento stellt seine Trainingsdaten über einen schreibgeschützten

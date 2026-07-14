@@ -135,7 +135,13 @@ class PasswordResetToken(Base):
 
 class Activity(Base):
     __tablename__ = "activities"
-    __table_args__ = (UniqueConstraint("user_id", "file_hash", name="uq_activity_user_hash"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "file_hash", name="uq_activity_user_hash"),
+        CheckConstraint(
+            "geography_status IN ('pending', 'available', 'unavailable', 'error')",
+            name="ck_activity_geography_status",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4_str)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
@@ -169,6 +175,9 @@ class Activity(Base):
     weather: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     weather_status: Mapped[str] = mapped_column(String(30), default="pending")
     weather_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    geography_data: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    geography_status: Mapped[str] = mapped_column(String(30), default="pending")
+    geography_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ai_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     ai_provider: Mapped[str | None] = mapped_column(String(80), nullable=True)
     ai_data_basis: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)

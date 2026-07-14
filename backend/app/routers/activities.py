@@ -27,10 +27,10 @@ from ..analysis import (
     normalized_profile,
     route_wind_summary,
 )
+from ..activity_geography import refresh_activity_geography
 from ..config import get_settings
 from ..database import get_db
 from ..deps import get_current_user
-from ..geography import reverse_geocode_track
 from ..models import Activity, ActivityPhoto, User, utcnow
 from ..photo_storage import (
     finalize_staged_photo_deletions,
@@ -172,13 +172,6 @@ def _refresh_weather(activity: Activity) -> None:
                 activity.weather["route_weather_classification"] = classify_route_weather(weather_samples)
             except Exception:
                 pass
-            if not (activity.weather or {}).get("route_places"):
-                try:
-                    places = reverse_geocode_track(activity.track_points or [], settings)
-                except Exception:
-                    places = []
-                if places:
-                    activity.weather["route_places"] = places
         activity.weather_status = "available" if activity.weather else "unavailable"
     except Exception:
         activity.weather = None
@@ -255,8 +248,15 @@ async def upload_activity(
         ended_at=parsed.ended_at,
     )
     _apply_analysis(activity, parsed)
-    await run_in_threadpool(_refresh_weather, activity)
     db.add(activity)
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        destination.unlink(missing_ok=True)
+        raise HTTPException(status_code=409, detail="Diese TCX-Datei wurde bereits importiert.") from None
+    await run_in_threadpool(_refresh_weather, activity)
+    await run_in_threadpool(refresh_activity_geography, db, activity, settings)
     _invalidate_later_summaries(db, activity)
     try:
         db.commit()
@@ -394,6 +394,7 @@ def reanalyze_activity(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     _apply_analysis(activity, parsed)
     _refresh_weather(activity)
+    refresh_activity_geography(db, activity, get_settings(), force=True)
     db.commit()
     db.refresh(activity)
     return _activity_response(activity)

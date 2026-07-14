@@ -1,7 +1,15 @@
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
+from typing import Any
 
+import httpx
+from fastapi.testclient import TestClient
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.config import get_settings
+from app.database import engine
+from app.models import Activity
 from conftest import SAMPLE_TCX
 
 
@@ -80,3 +88,40 @@ def test_users_cannot_access_each_others_activities(client: TestClient, auth: di
     second = {"Authorization": f"Bearer {registration.json()['access_token']}"}
     assert client.get(f"/api/v1/activities/{activity_id}", headers=second).status_code == 404
     assert client.get("/api/v1/activities", headers=second).json()["total"] == 0
+
+
+def test_new_activity_geocodes_with_locationiq_when_weather_is_unavailable(
+    client: TestClient,
+    auth: dict[str, str],
+    monkeypatch,
+):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "reverse_geocoding_provider", "locationiq")
+    monkeypatch.setattr(settings, "reverse_geocoding_base_url", "https://eu1.locationiq.com/v1")
+    monkeypatch.setattr(settings, "locationiq_api_key", "private-upload-key")
+    monkeypatch.setattr(settings, "reverse_geocoding_max_samples", 1)
+
+    def requester(url: str, **kwargs: Any) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"address": {"city": "Berlin", "state": "Berlin", "country": "Deutschland", "country_code": "de"}},
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(httpx, "get", requester)
+    uploaded = client.post(
+        "/api/v1/activities",
+        headers=auth,
+        files={"file": ("locationiq-new.tcx", SAMPLE_TCX, "application/xml")},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    assert uploaded.json()["weather_status"] == "unavailable"
+
+    with Session(engine) as db:
+        activity = db.scalar(select(Activity))
+        assert activity is not None
+        assert activity.geography_status == "available"
+        assert activity.geography_data["route_places"]
+
+    overview = client.get("/api/v1/gamification/overview", headers=auth).json()
+    assert next(item for item in overview["discoveries"] if item["scope"] == "municipality")["count"] == 1

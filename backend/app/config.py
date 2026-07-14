@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     # personal data. The endpoint can be switched without a client update.
     reverse_geocoding_provider: str = "disabled"
     reverse_geocoding_base_url: str | None = None
+    locationiq_api_key: SecretStr | None = Field(default=None, repr=False)
     reverse_geocoding_timeout_seconds: float = Field(default=3.0, ge=0.1, le=10.0)
     reverse_geocoding_max_samples: int = Field(default=8, ge=0, le=12)
     reverse_geocoding_minimum_spacing_m: float = Field(default=1_500.0, ge=0, le=1_000_000)

@@ -7,6 +7,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..activity_geography import (
+    activity_needs_geography_backfill,
+    geocoding_status_for_activities,
+    refresh_activity_geography,
+)
 from ..config import get_settings
 from ..database import get_db
 from ..deps import get_current_user
@@ -28,8 +33,8 @@ from ..gamification import (
     total_xp,
 )
 from ..gamification_ai import ai_challenges_available, generate_challenge_suggestions
-from ..geography import reverse_geocode_track
-from ..models import GamificationChallenge, GamificationGoal, User, utcnow, uuid4_str
+from ..geography import reverse_geocoding_configuration_status
+from ..models import Activity, GamificationChallenge, GamificationGoal, User, utcnow, uuid4_str
 from ..schemas import (
     GamificationAnnualAwardListResponse,
     GamificationBadgeListResponse,
@@ -38,6 +43,8 @@ from ..schemas import (
     GamificationChallengeListResponse,
     GamificationChallengeResponse,
     GamificationChallengeUpdate,
+    GamificationDiscoveryBackfillRequest,
+    GamificationDiscoveryBackfillResponse,
     GamificationDiscoveryListResponse,
     GamificationDiscoveryResponse,
     GamificationGoalCreate,
@@ -125,6 +132,7 @@ def overview(current_user: User = Depends(get_current_user), db: Session = Depen
         streak=snapshot.streak,
         record_chases=snapshot_record_chases(snapshot),
         discoveries=discovery_summary_payload(snapshot.discoveries),
+        geocoding=geocoding_status_for_activities(get_settings(), snapshot.activities),
         annual_awards=annual_award_payloads(snapshot),
     )
     db.commit()
@@ -324,31 +332,63 @@ def list_discoveries(
     return GamificationDiscoveryListResponse(items=items, total=len(items), by_scope=discovery_summary_payload(snapshot.discoveries))
 
 
-@router.post("/discoveries/backfill", response_model=GamificationDiscoveryListResponse)
-def backfill_discoveries(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> GamificationDiscoveryListResponse:
-    """Explicitly geocode existing rides when the owner configured a provider."""
+@router.post("/discoveries/backfill", response_model=GamificationDiscoveryBackfillResponse)
+def backfill_discoveries(
+    payload: GamificationDiscoveryBackfillRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> GamificationDiscoveryBackfillResponse:
+    """Geocode a small, resumable batch of owner-scoped activities."""
 
     settings = get_settings()
-    if settings.reverse_geocoding_provider.casefold() == "disabled" or not settings.reverse_geocoding_base_url:
-        raise HTTPException(status_code=404, detail="Ortsentdeckungen sind ohne ausdrücklich konfigurierten Geocoder nicht verfügbar.")
-    from ..gamification import replace_activity_discoveries
-    from ..models import Activity
+    configuration = reverse_geocoding_configuration_status(settings)
+    if configuration["status"] == "disabled":
+        raise HTTPException(status_code=404, detail="Die Ortserkennung ist nicht aktiviert.")
+    if configuration["status"] != "ready":
+        raise HTTPException(status_code=409, detail="Die Ortserkennung ist nicht vollständig konfiguriert.")
 
-    activities = list(db.scalars(select(Activity).where(Activity.user_id == current_user.id).order_by(Activity.started_at)).all())
-    for activity in activities:
-        places = reverse_geocode_track(activity.track_points or [], settings)
-        if places:
-            activity.weather = dict(activity.weather or {})
-            activity.weather["route_places"] = places
-            replace_activity_discoveries(db, current_user.id, activity.id, places)
-    snapshot = build_snapshot(db, current_user, settings.timezone, _today())
-    items = [GamificationDiscoveryResponse.model_validate({
-        "id": item.id, "kind": item.kind, "name": item.name, "region": item.region,
-        "country_code": item.country_code, "latitude": item.latitude, "longitude": item.longitude,
-        "first_discovered_at": item.first_discovered_at, "first_activity_id": item.first_activity_id,
-    }) for item in snapshot.discoveries]
-    db.commit()
-    return GamificationDiscoveryListResponse(items=items, total=len(items), by_scope=discovery_summary_payload(snapshot.discoveries))
+    provider = str(configuration["provider"] or "")
+    activities = list(
+        db.scalars(
+            select(Activity)
+            .where(Activity.user_id == current_user.id)
+            .order_by(Activity.started_at, Activity.id)
+        ).all()
+    )
+    eligible = [
+        activity
+        for activity in activities
+        if activity_needs_geography_backfill(activity, provider, retry_failed=payload.retry_failed)
+    ]
+    selected = eligible[: payload.limit]
+    processed = 0
+    available = 0
+    rate_limited = False
+    retry_after_seconds: int | None = None
+    for activity in selected:
+        result = refresh_activity_geography(db, activity, settings)
+        processed += 1
+        available += int(result.status == "available")
+        db.commit()
+        if result.rate_limited:
+            rate_limited = True
+            retry_after_seconds = result.retry_after_seconds
+            break
+
+    remaining = sum(
+        activity_needs_geography_backfill(activity, provider, retry_failed=payload.retry_failed)
+        for activity in activities
+    )
+    failed = sum(activity.geography_status == "error" for activity in activities)
+    return GamificationDiscoveryBackfillResponse(
+        processed=processed,
+        available=available,
+        failed=failed,
+        remaining=remaining,
+        total=len(eligible),
+        rate_limited=rate_limited,
+        retry_after_seconds=retry_after_seconds,
+    )
 
 
 @router.get("/annual-awards", response_model=GamificationAnnualAwardListResponse)
@@ -377,6 +417,7 @@ def rebuild(current_user: User = Depends(get_current_user), db: Session = Depend
         streak=snapshot.streak,
         record_chases=snapshot_record_chases(snapshot),
         discoveries=discovery_summary_payload(snapshot.discoveries),
+        geocoding=geocoding_status_for_activities(get_settings(), snapshot.activities),
         annual_awards=annual_award_payloads(snapshot),
     )
     db.commit()

@@ -666,6 +666,23 @@ export interface GamificationDiscovery {
   places: string[]
 }
 
+export interface GamificationGeocodingStatus {
+  status: 'disabled' | 'misconfigured' | 'ready' | 'rate_limited'
+  provider: string | null
+  attribution_label: string | null
+  attribution_url: string | null
+}
+
+export interface GamificationDiscoveryBackfillResult {
+  processed: number
+  available: number
+  failed: number
+  remaining: number
+  total: number
+  rate_limited: boolean
+  retry_after_seconds: number | null
+}
+
 export interface GamificationAnnualAward {
   id: string
   key: string
@@ -735,6 +752,7 @@ export interface GamificationOverview {
   streak: GamificationStreak
   record_chases: GamificationRecordChase[]
   discoveries: GamificationDiscovery[]
+  geocoding: GamificationGeocodingStatus
   annual_awards: GamificationAnnualAward[]
 }
 

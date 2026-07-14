@@ -74,6 +74,7 @@ const overview: GamificationOverview = {
     { scope: 'state', label: 'Bundesländer', count: 2, total_available: 16, progress_percent: 12.5, places: ['Baden-Württemberg', 'Hessen'] },
     { scope: 'country', label: 'Länder', count: 1, total_available: null, progress_percent: null, places: ['Deutschland'] },
   ],
+  geocoding: { status: 'ready', provider: 'locationiq', attribution_label: 'Search by LocationIQ.com', attribution_url: 'https://locationiq.com/attribution' },
   annual_awards: [{ id: 'award-1', key: 'distance', year: 2026, title: 'Weitblick 2026', description: 'Dein distanzstärkstes Radjahr.', value: 1_240, unit: 'km', tier: 'gold', earned: true, earned_at: '2026-07-01T08:00:00Z', icon: null, reward_xp: 100, is_final: false }],
 }
 
@@ -158,5 +159,36 @@ describe('GamificationPage', () => {
     await waitFor(() => expect(accept).toHaveBeenCalledWith('challenge-1'))
     await user.click(screen.getByRole('button', { name: 'Nicht jetzt' }))
     await waitFor(() => expect(decline).toHaveBeenCalledWith('challenge-1'))
+  })
+
+  it('startet den LocationIQ-Backfill bewusst und zeigt die Attribution', async () => {
+    const user = userEvent.setup()
+    const backfill = vi.spyOn(gamificationApi, 'backfillDiscoveries').mockResolvedValue({
+      processed: 1,
+      available: 1,
+      failed: 0,
+      remaining: 0,
+      total: 1,
+      rate_limited: false,
+      retry_after_seconds: null,
+    })
+    renderPage()
+    await screen.findByText('Search by LocationIQ.com')
+
+    await user.click(screen.getByRole('button', { name: 'Orte aus bestehenden Fahrten ermitteln' }))
+
+    await waitFor(() => expect(backfill).toHaveBeenCalledWith(false))
+    expect(await screen.findByText('1 von 1 Fahrten verarbeitet')).toBeInTheDocument()
+  })
+
+  it('ersetzt leere Ortskacheln bei deaktiviertem Provider durch einen Hinweis', async () => {
+    renderPage({
+      ...overview,
+      discoveries: overview.discoveries.map((item) => ({ ...item, count: 0, places: [] })),
+      geocoding: { status: 'disabled', provider: null, attribution_label: null, attribution_url: null },
+    })
+
+    expect(await screen.findByText('Die Ortserkennung ist auf diesem Server nicht aktiviert.')).toBeInTheDocument()
+    expect(screen.queryByText('Noch kein Dorf erkannt.')).not.toBeInTheDocument()
   })
 })

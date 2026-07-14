@@ -836,6 +836,28 @@ class GamificationDiscoveryListResponse(BaseModel):
     by_scope: list[GamificationDiscoverySummary]
 
 
+class GamificationGeocodingStatusResponse(BaseModel):
+    status: Literal["disabled", "misconfigured", "ready", "rate_limited"]
+    provider: str | None = None
+    attribution_label: str | None = None
+    attribution_url: str | None = None
+
+
+class GamificationDiscoveryBackfillRequest(BaseModel):
+    limit: int = Field(default=5, ge=1, le=10)
+    retry_failed: bool = False
+
+
+class GamificationDiscoveryBackfillResponse(BaseModel):
+    processed: int
+    available: int
+    failed: int
+    remaining: int
+    total: int
+    rate_limited: bool = False
+    retry_after_seconds: int | None = None
+
+
 class GamificationAnnualAwardResponse(BaseModel):
     id: str
     key: str
@@ -870,4 +892,5 @@ class GamificationOverviewResponse(BaseModel):
     streak: GamificationStreakResponse
     record_chases: list[GamificationRecordChaseResponse]
     discoveries: list[GamificationDiscoverySummary]
+    geocoding: GamificationGeocodingStatusResponse
     annual_awards: list[GamificationAnnualAwardResponse]

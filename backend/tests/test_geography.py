@@ -9,9 +9,13 @@ import pytest
 from app.geography import (
     BACKFILL_REQUEST_INTERVAL_SECONDS,
     DEFAULT_USER_AGENT,
+    LOCATIONIQ_ATTRIBUTION,
+    LocationIQReverseGeocoder,
     MAXIMUM_REVERSE_GEOCODING_SAMPLES,
     NominatimReverseGeocoder,
     RequestRateLimiter,
+    ReverseGeocodingConfigurationError,
+    ReverseGeocodingRateLimitError,
     reverse_geocode_track,
     sample_track_points,
 )
@@ -212,6 +216,99 @@ def test_nominatim_client_uses_stable_identity_and_reusable_minimal_cache():
     assert calls[0]["params"]["lat"] == "52.5000"
     assert calls[0]["params"]["lon"] == "13.4000"
     assert all("road" not in cached["address"] for cached in cache.values())
+
+
+def test_locationiq_client_uses_eu_reverse_api_and_sanitizes_response():
+    calls: list[dict[str, Any]] = []
+
+    class ImmediateLimiter:
+        def run(self, request: Any, *, minimum_interval_seconds: float) -> Any:
+            assert minimum_interval_seconds == 0.5
+            return request()
+
+    def requester(url: str, **kwargs: Any) -> httpx.Response:
+        calls.append({"url": url, **kwargs})
+        return httpx.Response(
+            200,
+            json={
+                "display_name": "Eine genaue Adresse, Berlin",
+                "address": {
+                    "road": "Nicht speichern",
+                    "town": "Werder (Havel)",
+                    "state": "Brandenburg",
+                    "country": "Deutschland",
+                    "country_code": "de",
+                },
+            },
+            request=httpx.Request("GET", url),
+        )
+
+    client = LocationIQReverseGeocoder(
+        "https://eu1.locationiq.com/v1",
+        "private-test-key",
+        rate_limiter=ImmediateLimiter(),
+        requester=requester,
+    )
+
+    result = client.reverse(52.5, 13.4)
+
+    assert result == {
+        "address": {
+            "town": "Werder (Havel)",
+            "state": "Brandenburg",
+            "country": "Deutschland",
+            "country_code": "de",
+        }
+    }
+    assert client.attribution == LOCATIONIQ_ATTRIBUTION
+    assert calls[0]["url"] == "https://eu1.locationiq.com/v1/reverse"
+    assert calls[0]["params"] == {
+        "key": "private-test-key",
+        "lat": "52.5000",
+        "lon": "13.4000",
+        "format": "json",
+        "addressdetails": 1,
+        "accept-language": "de",
+        "normalizeaddress": 0,
+    }
+    assert "private-test-key" not in repr(result)
+
+
+@pytest.mark.parametrize(
+    ("status_code", "exception"),
+    [(401, ReverseGeocodingConfigurationError), (403, ReverseGeocodingConfigurationError), (429, ReverseGeocodingRateLimitError)],
+)
+def test_locationiq_errors_never_expose_the_key(status_code: int, exception: type[Exception]):
+    key = "never-log-this-key"
+
+    def requester(url: str, **kwargs: Any) -> httpx.Response:
+        return httpx.Response(
+            status_code,
+            headers={"Retry-After": "45"},
+            request=httpx.Request("GET", url),
+        )
+
+    client = LocationIQReverseGeocoder(
+        "https://eu1.locationiq.com/v1",
+        key,
+        rate_limiter=SimpleNamespace(run=lambda request, **kwargs: request()),
+        requester=requester,
+    )
+    with pytest.raises(exception) as captured:
+        client.reverse(52.5, 13.4)
+
+    assert key not in str(captured.value)
+    if isinstance(captured.value, ReverseGeocodingRateLimitError):
+        assert captured.value.retry_after_seconds == 45
+
+
+def test_httpx_logging_filter_redacts_locationiq_keys(caplog: pytest.LogCaptureFixture):
+    logger = __import__("logging").getLogger("httpx")
+    with caplog.at_level("INFO", logger="httpx"):
+        logger.info("HTTP Request: GET %s", "https://eu1.locationiq.com/v1/reverse?key=super-secret&lat=52")
+
+    assert "super-secret" not in caplog.text
+    assert "key=[redacted]" in caplog.text
 
 
 def test_rate_limiter_serializes_request_starts_at_one_per_second():

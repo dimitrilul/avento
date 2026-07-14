@@ -51,6 +51,7 @@ describe('Gamification-API', () => {
         { scope: 'city', label: 'Städte', count: 2, places: ['Freiburg', 'Lörrach'] },
         { scope: 'municipality', label: 'Kommunen', count: 1, places: ['Gundelfingen'] },
       ],
+      geocoding: { status: 'ready', provider: 'locationiq', attribution_label: 'Search by LocationIQ.com', attribution_url: 'https://locationiq.com/attribution' },
       annual_awards: [{ id: 'award-1', key: 'distance', year: 2026, title: 'Weitblick', earned: true, reward_xp: 100, is_final: false }],
     })
 
@@ -61,6 +62,7 @@ describe('Gamification-API', () => {
     expect(overview.discoveries).toEqual([
       expect.objectContaining({ scope: 'municipality', count: 3, places: ['Freiburg', 'Lörrach', 'Gundelfingen'] }),
     ])
+    expect(overview.geocoding).toMatchObject({ status: 'ready', provider: 'locationiq' })
     expect(overview.annual_awards[0]).toMatchObject({ key: 'distance', reward_xp: 100, is_final: false })
   })
 
@@ -69,6 +71,7 @@ describe('Gamification-API', () => {
       const url = String(input)
       if (init?.method === 'DELETE' || url.endsWith('/decline')) return new Response(null, { status: 204 })
       if (url === '/api/v1/gamification/overview') return jsonResponse({})
+      if (url === '/api/v1/gamification/discoveries/backfill') return jsonResponse({ processed: 1, available: 1, failed: 0, remaining: 0, total: 1 })
       return jsonResponse({ id: 'goal-1', title: 'Monatsziel', metric: 'distance_m', target_value: 80_000 })
     })
 
@@ -78,6 +81,7 @@ describe('Gamification-API', () => {
     await gamificationApi.deleteGoal('ziel/1')
     await gamificationApi.acceptChallenge('challenge/1')
     await gamificationApi.declineChallenge('challenge/1')
+    await gamificationApi.backfillDiscoveries()
 
     expect(fetchMock.mock.calls.map(([url, init]) => [url, init?.method ?? 'GET'])).toEqual([
       ['/api/v1/gamification/overview', 'GET'],
@@ -86,6 +90,7 @@ describe('Gamification-API', () => {
       ['/api/v1/gamification/goals/ziel%2F1', 'DELETE'],
       ['/api/v1/gamification/challenges/challenge%2F1/accept', 'POST'],
       ['/api/v1/gamification/challenges/challenge%2F1/decline', 'POST'],
+      ['/api/v1/gamification/discoveries/backfill', 'POST'],
     ])
     expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({
       title: 'Monatsziel',
@@ -95,7 +100,7 @@ describe('Gamification-API', () => {
       deadline: null,
     })
     expect(JSON.parse(String(fetchMock.mock.calls[2][1]?.body))).toEqual({ title: 'Neuer Name' })
+    expect(JSON.parse(String(fetchMock.mock.calls[6][1]?.body))).toEqual({ limit: 5, retry_failed: false })
     expect(gamificationEndpoints.overview).toBe('/gamification/overview')
   })
 })
-

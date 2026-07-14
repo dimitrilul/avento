@@ -55,6 +55,7 @@ import {
   type GamificationStreak,
 } from '../api'
 import { GamificationLevelCard } from '../components/gamification/GamificationLevelCard'
+import { DiscoveryGeocodingControl } from '../components/gamification/DiscoveryGeocodingControl'
 import { GoalDialog } from '../components/gamification/GoalDialog'
 import { formatGamificationValue, formatXp, periodLabel } from '../components/gamification/gamificationFormat'
 import { PageHeader } from '../components/PageHeader'
@@ -153,7 +154,7 @@ export function GamificationPage() {
           </Box>
 
           <BadgesPanel badges={overview.data.badges} />
-          <DiscoveriesPanel discoveries={overview.data.discoveries} />
+          <DiscoveriesPanel data={overview.data} />
           <AnnualAwardsPanel awards={overview.data.annual_awards} />
 
           <Alert severity="info" icon={<ShieldRoundedIcon />} sx={{ borderRadius: 3 }}>
@@ -452,17 +453,21 @@ const discoverySpecs: Array<{ scope: GamificationDiscoveryScope; label: string; 
   { scope: 'country', label: 'Länder', singular: 'Land', icon: <PublicRoundedIcon /> },
 ]
 
-function DiscoveriesPanel({ discoveries }: { discoveries: GamificationDiscovery[] }) {
+function DiscoveriesPanel({ data }: { data: GamificationOverview }) {
+  const discoveries = data.discoveries
+  const showDiscoveryCounts = ['ready', 'rate_limited'].includes(data.geocoding.status)
+    || discoveries.some((item) => item.count > 0)
   return (
     <Card component="section" aria-labelledby="discoveries-heading">
       <CardContent sx={{ p: { xs: 2, sm: 2.5 }, '&:last-child': { pb: { xs: 2, sm: 2.5 } } }}>
         <SectionHeading id="discoveries-heading" icon={<PublicRoundedIcon />} title="Deine Entdeckungen" description="Orte aus deinen eigenen Fahrten, von der kleinen Gemeinde bis zum Land." />
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', xl: 'repeat(4, minmax(0, 1fr))' }, gap: 1.5, mt: 2.5 }}>
+        {showDiscoveryCounts && <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', xl: 'repeat(4, minmax(0, 1fr))' }, gap: 1.5, mt: 2.5 }}>
           {discoverySpecs.map((spec) => {
             const discovery = discoveries.find((item) => item.scope === spec.scope)
             return <DiscoveryCard key={spec.scope} spec={spec} discovery={discovery} />
           })}
-        </Box>
+        </Box>}
+        <DiscoveryGeocodingControl geocoding={data.geocoding} />
       </CardContent>
     </Card>
   )

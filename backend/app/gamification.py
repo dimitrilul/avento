@@ -669,6 +669,10 @@ def _normalized_discovery(
             external_id = f"{key}:{payload[key]}"
             break
     details = dict(payload.get("metadata")) if isinstance(payload.get("metadata"), Mapping) else {}
+    if provider := _text_value(payload.get("provider")):
+        details["provider"] = provider
+    if attribution := _text_value(payload.get("attribution")):
+        details["attribution"] = attribution
     if external_id:
         details["external_id"] = external_id
     return NormalizedDiscovery(

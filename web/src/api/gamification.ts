@@ -4,6 +4,7 @@ import type {
   GamificationBadge,
   GamificationChallenge,
   GamificationDiscovery,
+  GamificationDiscoveryBackfillResult,
   GamificationDiscoveryScope,
   GamificationGoal,
   GamificationGoalInput,
@@ -28,6 +29,7 @@ export const gamificationEndpoints = {
   goal: (goalId: string) => `/gamification/goals/${encodeURIComponent(goalId)}`,
   acceptChallenge: (challengeId: string) => `/gamification/challenges/${encodeURIComponent(challengeId)}/accept`,
   declineChallenge: (challengeId: string) => `/gamification/challenges/${encodeURIComponent(challengeId)}/decline`,
+  discoveryBackfill: '/gamification/discoveries/backfill',
 } as const
 
 export const gamificationOverviewQueryKey = ['gamification', 'overview'] as const
@@ -334,6 +336,33 @@ function normalizeAnnualAward(value: unknown): GamificationAnnualAward {
   }
 }
 
+function normalizeGeocoding(value: unknown): GamificationOverview['geocoding'] {
+  const object = asObject(value)
+  const rawStatus = asString(first(object, ['status']), 'disabled')
+  const status = ['disabled', 'misconfigured', 'ready', 'rate_limited'].includes(rawStatus)
+    ? rawStatus as GamificationOverview['geocoding']['status']
+    : 'misconfigured'
+  return {
+    status,
+    provider: asNullableString(first(object, ['provider'])),
+    attribution_label: asNullableString(first(object, ['attribution_label', 'attribution'])),
+    attribution_url: asNullableString(first(object, ['attribution_url'])),
+  }
+}
+
+function normalizeBackfill(value: unknown): GamificationDiscoveryBackfillResult {
+  const object = asObject(value)
+  return {
+    processed: Math.max(0, Math.round(asNumber(object.processed))),
+    available: Math.max(0, Math.round(asNumber(object.available))),
+    failed: Math.max(0, Math.round(asNumber(object.failed))),
+    remaining: Math.max(0, Math.round(asNumber(object.remaining))),
+    total: Math.max(0, Math.round(asNumber(object.total))),
+    rate_limited: asBoolean(object.rate_limited),
+    retry_after_seconds: asNullableNumber(object.retry_after_seconds),
+  }
+}
+
 /** Mappt kleine Feldnamensabweichungen auf das stabile UI-Modell. */
 export function normalizeGamificationOverview(value: unknown): GamificationOverview {
   const response = asObject(value)
@@ -365,6 +394,7 @@ export function normalizeGamificationOverview(value: unknown): GamificationOverv
     streak: normalizeStreak(first(object, ['streak', 'weekly_streak'])),
     record_chases: asArray(first(object, ['record_chases', 'records', 'personal_records'])).map(normalizeRecordChase),
     discoveries: normalizeDiscoveries(first(object, ['discoveries', 'exploration'])),
+    geocoding: normalizeGeocoding(first(object, ['geocoding', 'geocoder'])),
     annual_awards: asArray(first(object, ['annual_awards', 'yearly_awards', 'awards'])).map(normalizeAnnualAward),
   }
 }
@@ -400,5 +430,11 @@ export const gamificationApi = {
   async declineChallenge(challengeId: string) {
     const response = await apiRequest<unknown>(gamificationEndpoints.declineChallenge(challengeId), { method: 'POST' })
     return response == null ? null : normalizeChallenge(response, 'declined')
+  },
+  async backfillDiscoveries(retryFailed = false) {
+    return normalizeBackfill(await apiRequest<unknown>(gamificationEndpoints.discoveryBackfill, {
+      method: 'POST',
+      body: { limit: 5, retry_failed: retryFailed },
+    }))
   },
 }

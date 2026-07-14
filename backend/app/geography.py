@@ -3,7 +3,9 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Mapping, MutableMapping
 from dataclasses import dataclass
 from hashlib import sha256
+import logging
 from math import asin, cos, isfinite, radians, sin, sqrt
+import re
 from threading import Lock
 import time
 from typing import Any, Protocol, TypedDict
@@ -23,6 +25,10 @@ DEFAULT_USER_AGENT = "Avento/0.1 (route reverse geocoding)"
 DEFAULT_OSM_ATTRIBUTION = "© OpenStreetMap contributors"
 NORMAL_REQUEST_INTERVAL_SECONDS = 1.0
 BACKFILL_REQUEST_INTERVAL_SECONDS = 15.0
+LOCATIONIQ_REQUEST_INTERVAL_SECONDS = 0.5
+LOCATIONIQ_DEFAULT_BASE_URL = "https://eu1.locationiq.com/v1"
+LOCATIONIQ_ATTRIBUTION = "Search by LocationIQ.com"
+LOCATIONIQ_ATTRIBUTION_URL = "https://locationiq.com/attribution"
 
 _ADDRESS_FIELDS = (
     "village",
@@ -46,6 +52,24 @@ _GENERIC_USER_AGENTS = {
 }
 
 
+class _SensitiveQueryFilter(logging.Filter):
+    _key_pattern = re.compile(r"([?&]key=)[^&\s\"']+", re.IGNORECASE)
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.args:
+            args = record.args if isinstance(record.args, tuple) else (record.args,)
+            record.args = tuple(
+                self._key_pattern.sub(r"\1[redacted]", str(value)) if "key=" in str(value).casefold() else value
+                for value in args
+            )
+        if isinstance(record.msg, str) and "key=" in record.msg.casefold():
+            record.msg = self._key_pattern.sub(r"\1[redacted]", record.msg)
+        return True
+
+
+logging.getLogger("httpx").addFilter(_SensitiveQueryFilter())
+
+
 class PlaceRecord(TypedDict):
     place_type: str
     name: str
@@ -66,6 +90,24 @@ class ReverseGeocodingCache(Protocol):
         ...
 
 
+class ReverseGeocodingError(RuntimeError):
+    """A sanitized reverse-geocoding failure safe for logs and API responses."""
+
+
+class ReverseGeocodingConfigurationError(ReverseGeocodingError):
+    pass
+
+
+class ReverseGeocodingTemporaryError(ReverseGeocodingError):
+    pass
+
+
+class ReverseGeocodingRateLimitError(ReverseGeocodingTemporaryError):
+    def __init__(self, retry_after_seconds: int | None = None) -> None:
+        super().__init__("Das Geocoding-Kontingent ist vorübergehend ausgeschöpft.")
+        self.retry_after_seconds = retry_after_seconds
+
+
 class RequestRateLimiter:
     """Serialize requests and enforce a minimum interval between their starts."""
 
@@ -76,7 +118,7 @@ class RequestRateLimiter:
         clock: Callable[[], float] | None = None,
         sleeper: Callable[[float], None] | None = None,
     ) -> None:
-        self.minimum_interval_seconds = max(NORMAL_REQUEST_INTERVAL_SECONDS, float(minimum_interval_seconds))
+        self.minimum_interval_seconds = max(0.0, float(minimum_interval_seconds))
         self._clock = clock or time.monotonic
         self._sleeper = sleeper or time.sleep
         self._lock = Lock()
@@ -106,9 +148,9 @@ _RATE_LIMITERS: dict[str, RequestRateLimiter] = {}
 _RATE_LIMITERS_LOCK = Lock()
 
 
-def _shared_rate_limiter(base_url: str) -> RequestRateLimiter:
+def _shared_rate_limiter(base_url: str, minimum_interval_seconds: float = NORMAL_REQUEST_INTERVAL_SECONDS) -> RequestRateLimiter:
     with _RATE_LIMITERS_LOCK:
-        return _RATE_LIMITERS.setdefault(base_url, RequestRateLimiter())
+        return _RATE_LIMITERS.setdefault(base_url, RequestRateLimiter(minimum_interval_seconds))
 
 
 def _finite_number(value: Any) -> float | None:
@@ -414,6 +456,107 @@ class NominatimReverseGeocoder:
         return sanitized
 
 
+class LocationIQReverseGeocoder:
+    """LocationIQ v1 reverse client with sanitized errors and responses."""
+
+    provider = "locationiq"
+    attribution = LOCATIONIQ_ATTRIBUTION
+    attribution_url = LOCATIONIQ_ATTRIBUTION_URL
+
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        *,
+        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+        language: str = "de",
+        cache: ReverseGeocodingCache | MutableMapping[str, Any] | None = None,
+        rate_limiter: RequestRateLimiter | None = None,
+        minimum_request_interval_seconds: float = LOCATIONIQ_REQUEST_INTERVAL_SECONDS,
+        requester: Callable[..., httpx.Response] | None = None,
+    ) -> None:
+        self.base_url = base_url.strip().rstrip("/")
+        self.reverse_url = _reverse_url(base_url)
+        self.api_key = api_key.strip()
+        if not self.api_key:
+            raise ValueError("LocationIQ benötigt einen API-Key.")
+        timeout = _finite_number(timeout_seconds)
+        self.timeout_seconds = min(MAXIMUM_TIMEOUT_SECONDS, max(0.1, timeout or DEFAULT_TIMEOUT_SECONDS))
+        self.language = _normalize_text(language) or "de"
+        self.cache = cache
+        self.minimum_request_interval_seconds = max(
+            LOCATIONIQ_REQUEST_INTERVAL_SECONDS,
+            float(minimum_request_interval_seconds),
+        )
+        self.rate_limiter = rate_limiter or _shared_rate_limiter(
+            f"locationiq:{self.base_url}",
+            self.minimum_request_interval_seconds,
+        )
+        self._requester = requester or httpx.get
+
+    def _cache_key(self, latitude: float, longitude: float) -> str:
+        endpoint = sha256(self.base_url.encode("utf-8")).hexdigest()[:16]
+        return f"locationiq:{endpoint}:{latitude:.4f}:{longitude:.4f}:{self.language.casefold()}"
+
+    @staticmethod
+    def _retry_after(response: httpx.Response) -> int | None:
+        value = response.headers.get("Retry-After")
+        try:
+            return max(1, int(float(value))) if value else None
+        except (TypeError, ValueError):
+            return None
+
+    def reverse(self, latitude: float, longitude: float) -> Mapping[str, Any] | None:
+        cache_key = self._cache_key(latitude, longitude)
+        if (cached := _cache_get(self.cache, cache_key)) is not None:
+            return cached
+
+        def request() -> httpx.Response:
+            return self._requester(
+                self.reverse_url,
+                params={
+                    "key": self.api_key,
+                    "lat": f"{latitude:.4f}",
+                    "lon": f"{longitude:.4f}",
+                    "format": "json",
+                    "addressdetails": 1,
+                    "accept-language": self.language,
+                    "normalizeaddress": 0,
+                },
+                headers={"Accept": "application/json"},
+                timeout=self.timeout_seconds,
+                follow_redirects=False,
+            )
+
+        try:
+            response = self.rate_limiter.run(
+                request,
+                minimum_interval_seconds=self.minimum_request_interval_seconds,
+            )
+        except Exception:
+            raise ReverseGeocodingTemporaryError("LocationIQ ist vorübergehend nicht erreichbar.") from None
+
+        if response.status_code in {401, 403}:
+            raise ReverseGeocodingConfigurationError("LocationIQ hat die Zugangsdaten abgelehnt.")
+        if response.status_code == 404:
+            return None
+        if response.status_code == 429:
+            raise ReverseGeocodingRateLimitError(self._retry_after(response))
+        if response.status_code >= 500:
+            raise ReverseGeocodingTemporaryError("LocationIQ ist vorübergehend nicht verfügbar.")
+        if response.status_code >= 400:
+            raise ReverseGeocodingConfigurationError("LocationIQ hat die Anfrage abgelehnt.")
+        try:
+            payload = response.json()
+        except Exception:
+            raise ReverseGeocodingTemporaryError("LocationIQ hat keine gültige Antwort geliefert.") from None
+        if not isinstance(payload, Mapping):
+            return None
+        sanitized = _sanitized_response(payload)
+        _cache_set(self.cache, cache_key, sanitized)
+        return sanitized
+
+
 def _setting(settings: Any, *names: str, default: Any = None) -> Any:
     for name in names:
         if isinstance(settings, Mapping) and name in settings:
@@ -431,6 +574,37 @@ def _enabled(value: Any) -> bool:
     if isinstance(value, str):
         return value.strip().casefold() in {"1", "true", "yes", "on"}
     return bool(value)
+
+
+def _secret_value(value: Any) -> str | None:
+    if value is None:
+        return None
+    getter = getattr(value, "get_secret_value", None)
+    raw = getter() if callable(getter) else value
+    return _normalize_text(raw)
+
+
+def reverse_geocoding_configuration_status(settings: Any) -> dict[str, str | None]:
+    provider = (_normalize_text(_setting(settings, "reverse_geocoding_provider", default="disabled")) or "disabled").casefold()
+    if provider == "disabled":
+        return {"status": "disabled", "provider": None, "attribution_label": None, "attribution_url": None}
+    base_url = _normalize_text(_setting(settings, "reverse_geocoding_base_url"))
+    if provider == "locationiq":
+        ready = bool(base_url and _secret_value(_setting(settings, "locationiq_api_key")))
+        return {
+            "status": "ready" if ready else "misconfigured",
+            "provider": "locationiq",
+            "attribution_label": LOCATIONIQ_ATTRIBUTION,
+            "attribution_url": LOCATIONIQ_ATTRIBUTION_URL,
+        }
+    if provider == "nominatim":
+        return {
+            "status": "ready" if base_url else "misconfigured",
+            "provider": "nominatim",
+            "attribution_label": DEFAULT_OSM_ATTRIBUTION,
+            "attribution_url": "https://www.openstreetmap.org/copyright",
+        }
+    return {"status": "misconfigured", "provider": provider, "attribution_label": None, "attribution_url": None}
 
 
 def _bounded_setting(
@@ -452,7 +626,10 @@ def _configured_geocoder(settings: Any) -> Any | None:
     provider = _normalize_text(
         _setting(settings, "reverse_geocoding_provider", "geocoding_provider", default="disabled")
     )
-    if provider is None or provider.casefold() != "nominatim":
+    if provider is None:
+        return None
+    provider = provider.casefold()
+    if provider == "disabled":
         return None
     base_url = _normalize_text(
         _setting(
@@ -462,11 +639,17 @@ def _configured_geocoder(settings: Any) -> Any | None:
             "geocoding_base_url",
         )
     )
+    if provider == "locationiq" and base_url is None:
+        base_url = LOCATIONIQ_DEFAULT_BASE_URL
     if base_url is None:
         return None
 
     backfill = _enabled(_setting(settings, "reverse_geocoding_backfill_mode", default=False))
-    required_interval = BACKFILL_REQUEST_INTERVAL_SECONDS if backfill else NORMAL_REQUEST_INTERVAL_SECONDS
+    required_interval = (
+        LOCATIONIQ_REQUEST_INTERVAL_SECONDS
+        if provider == "locationiq"
+        else BACKFILL_REQUEST_INTERVAL_SECONDS if backfill else NORMAL_REQUEST_INTERVAL_SECONDS
+    )
     interval = _bounded_setting(
         settings,
         ("reverse_geocoding_minimum_interval_seconds",),
@@ -482,6 +665,22 @@ def _configured_geocoder(settings: Any) -> Any | None:
         MAXIMUM_TIMEOUT_SECONDS,
     )
     try:
+        if provider == "locationiq":
+            api_key = _secret_value(_setting(settings, "locationiq_api_key"))
+            if api_key is None:
+                return None
+            return LocationIQReverseGeocoder(
+                base_url,
+                api_key,
+                timeout_seconds=timeout,
+                language=_setting(settings, "reverse_geocoding_language", default="de"),
+                cache=_setting(settings, "reverse_geocoding_cache"),
+                rate_limiter=_setting(settings, "reverse_geocoding_rate_limiter"),
+                minimum_request_interval_seconds=interval,
+                requester=_setting(settings, "reverse_geocoding_requester"),
+            )
+        if provider != "nominatim":
+            return None
         return NominatimReverseGeocoder(
             base_url,
             user_agent=_setting(settings, "reverse_geocoding_user_agent", default=DEFAULT_USER_AGENT),
@@ -645,10 +844,12 @@ def normalize_place_records(
 def reverse_geocode_track(
     track_points: Iterable[Mapping[str, Any]],
     settings: Any,
+    *,
+    raise_errors: bool = False,
 ) -> list[PlaceRecord]:
     """Reverse-geocode sparse route samples; unavailable providers yield an empty list.
 
-    Canonical settings are ``reverse_geocoding_provider`` (currently
+    Canonical settings are ``reverse_geocoding_provider`` (``locationiq`` or
     ``nominatim``), ``reverse_geocoding_base_url``, timeout, sample, language,
     cache and rate-limit options with the same prefix. No endpoint is used by
     default. Set ``reverse_geocoding_backfill_mode`` for the 4/minute limit.
@@ -657,8 +858,12 @@ def reverse_geocode_track(
     try:
         geocoder = _configured_geocoder(settings)
     except Exception:
+        if raise_errors:
+            raise ReverseGeocodingConfigurationError("Die Ortserkennung ist nicht gültig konfiguriert.") from None
         return []
     if geocoder is None or getattr(geocoder, "available", True) is False:
+        if raise_errors and reverse_geocoding_configuration_status(settings)["status"] == "ready":
+            raise ReverseGeocodingConfigurationError("Die Ortserkennung ist nicht gültig konfiguriert.")
         return []
 
     maximum_samples = int(
@@ -721,9 +926,16 @@ def reverse_geocode_track(
                 responses.append(response)
             elif isinstance(response, (list, tuple)):
                 responses.extend(item for item in response if isinstance(item, Mapping))
+        except (ReverseGeocodingConfigurationError, ReverseGeocodingRateLimitError):
+            if raise_errors:
+                raise
+            failures += 1
+            break
         except Exception:
             failures += 1
             if failures >= maximum_failures:
+                if raise_errors:
+                    raise ReverseGeocodingTemporaryError("Die Ortserkennung ist vorübergehend fehlgeschlagen.") from None
                 break
 
     return normalize_place_records(responses, provider=provider, attribution=attribution)
