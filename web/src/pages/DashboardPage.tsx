@@ -38,6 +38,7 @@ import { EmptyState, ErrorState } from '../components/States'
 import { MetricCard } from '../components/MetricCard'
 import { TrendChart } from '../components/TrendChart'
 import type { ShellOutletContext } from '../layout/AppShell'
+import { currentWeekRange } from '../utils/dateRange'
 import { formatDateTime, formatDistance, formatDuration, formatElevation, formatHeartRate, formatSpeedMps } from '../utils/format'
 
 type Period = 'week' | 'month' | 'year'
@@ -52,7 +53,7 @@ function periodRange(period: Period) {
   const today = new Date()
   const from = new Date(today)
   let granularity: StatisticsGranularity = 'day'
-  if (period === 'week') from.setDate(today.getDate() - 6)
+  if (period === 'week') return { ...currentWeekRange(today), granularity }
   if (period === 'month') from.setDate(today.getDate() - 29)
   if (period === 'year') {
     from.setFullYear(today.getFullYear() - 1)

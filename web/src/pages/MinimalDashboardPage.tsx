@@ -25,6 +25,7 @@ import { EmptyState, ErrorState } from '../components/States'
 import { TrackMap } from '../components/TrackMap'
 import { TrendChart } from '../components/TrendChart'
 import type { ShellOutletContext } from '../layout/AppShell'
+import { currentWeekRange } from '../utils/dateRange'
 import { formatDateTime, formatDistance, formatDuration, formatElevation, formatSpeedMps } from '../utils/format'
 
 type Period = 'week' | 'month' | 'year'
@@ -38,7 +39,7 @@ function periodRange(period: Period) {
   const today = new Date()
   const from = new Date(today)
   let granularity: StatisticsGranularity = 'day'
-  if (period === 'week') from.setDate(today.getDate() - 6)
+  if (period === 'week') return { ...currentWeekRange(today), granularity }
   if (period === 'month') from.setDate(today.getDate() - 29)
   if (period === 'year') {
     from.setFullYear(today.getFullYear() - 1)
@@ -110,7 +111,7 @@ export function MinimalDashboardPage() {
         <Box sx={{ borderLeft: { md: '1px solid' }, borderColor: 'divider', pl: { md: 4 } }}>
           <Typography color="text.secondary" variant="body2">Trainingsbelastung</Typography>
           <Typography variant="h2" sx={{ mt: .5 }}>{Math.round(week.data?.training_load ?? 0).toLocaleString('de-DE')}</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Ein ruhiger Orientierungswert aus deinen Fahrten der letzten sieben Tage.</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Ein ruhiger Orientierungswert aus deinen Fahrten dieser Woche.</Typography>
         </Box>
       </Box>
 
