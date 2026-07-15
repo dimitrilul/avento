@@ -8,6 +8,7 @@ from pathlib import Path
 from time import perf_counter
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 from sqlalchemy import select
@@ -43,6 +44,110 @@ def _image_bytes(color: str, *, image_format: str = "JPEG") -> bytes:
     output = BytesIO()
     image.save(output, format=image_format)
     return output.getvalue()
+
+
+def _image_with_exif_bytes(
+    color: str,
+    *,
+    captured_at: str,
+    offset: str | None = None,
+    latitude: tuple[str, tuple[float, float, float]] | None = None,
+    longitude: tuple[str, tuple[float, float, float]] | None = None,
+) -> bytes:
+    image = Image.new("RGB", (320, 180), color)
+    exif = Image.Exif()
+    exif[36867] = captured_at
+    if offset:
+        exif[36881] = offset
+    if latitude and longitude:
+        exif[34853] = {
+            1: latitude[0],
+            2: latitude[1],
+            3: longitude[0],
+            4: longitude[1],
+        }
+    output = BytesIO()
+    image.save(output, format="JPEG", exif=exif)
+    return output.getvalue()
+
+
+def test_activity_photo_uses_exif_metadata_with_manual_values_taking_precedence(
+    client: TestClient,
+    auth: dict[str, str],
+):
+    activity_id = _upload_activity(client, auth)["id"]
+    image = _image_with_exif_bytes(
+        "#315F74",
+        captured_at="2026:06:01 10:15:30",
+        latitude=("N", (52.0, 30.0, 0.0)),
+        longitude=("E", (13.0, 24.0, 0.0)),
+    )
+    uploaded = client.post(
+        f"/api/v1/activities/{activity_id}/photos",
+        headers=auth,
+        files={"file": ("exif.jpg", image, "image/jpeg")},
+        data={"client_timezone": "Europe/Berlin"},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    assert uploaded.json()["captured_at"] == "2026-06-01T08:15:30Z"
+    assert uploaded.json()["latitude"] == 52.5
+    assert uploaded.json()["longitude"] == 13.4
+
+    fetched = client.get(uploaded.json()["file_url"], headers=auth)
+    with Image.open(BytesIO(fetched.content)) as normalized:
+        assert not normalized.getexif()
+
+    offset_image = _image_with_exif_bytes(
+        "#544A72",
+        captured_at="2026:06:02 09:00:00",
+        offset="-04:00",
+        latitude=("S", (33.0, 52.0, 0.0)),
+        longitude=("W", (151.0, 12.0, 0.0)),
+    )
+    offset_uploaded = client.post(
+        f"/api/v1/activities/{activity_id}/photos",
+        headers=auth,
+        files={"file": ("offset.jpg", offset_image, "image/jpeg")},
+    )
+    assert offset_uploaded.status_code == 201, offset_uploaded.text
+    assert offset_uploaded.json()["captured_at"] == "2026-06-02T13:00:00Z"
+    assert offset_uploaded.json()["latitude"] == pytest.approx(-33.8666667)
+    assert offset_uploaded.json()["longitude"] == pytest.approx(-151.2)
+
+    override_image = _image_with_exif_bytes(
+        "#684551",
+        captured_at="2026:06:02 09:00:00",
+        offset="-04:00",
+        latitude=("S", (33.0, 52.0, 0.0)),
+        longitude=("E", (151.0, 12.0, 0.0)),
+    )
+    overridden = client.post(
+        f"/api/v1/activities/{activity_id}/photos",
+        headers=auth,
+        files={"file": ("override.jpg", override_image, "image/jpeg")},
+        data={
+            "captured_at": "2026-06-02T14:00:00+02:00",
+            "latitude": "48.137",
+            "longitude": "11.575",
+            "client_timezone": "Invalid/Timezone",
+        },
+    )
+    assert overridden.status_code == 422
+
+    overridden = client.post(
+        f"/api/v1/activities/{activity_id}/photos",
+        headers=auth,
+        files={"file": ("override.jpg", override_image, "image/jpeg")},
+        data={
+            "captured_at": "2026-06-02T14:00:00+02:00",
+            "latitude": "48.137",
+            "longitude": "11.575",
+        },
+    )
+    assert overridden.status_code == 201, overridden.text
+    assert overridden.json()["captured_at"] == "2026-06-02T12:00:00Z"
+    assert overridden.json()["latitude"] == 48.137
+    assert overridden.json()["longitude"] == 11.575
 
 
 def _second_user(client: TestClient, auth: dict[str, str]) -> dict[str, str]:

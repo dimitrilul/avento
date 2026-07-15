@@ -192,6 +192,7 @@ interface AventoApi {
         @Part("captured_at") capturedAt: RequestBody? = null,
         @Part("latitude") latitude: RequestBody? = null,
         @Part("longitude") longitude: RequestBody? = null,
+        @Part("client_timezone") clientTimezone: RequestBody? = null,
     ): ActivityPhoto
 
     @PATCH("activities/{activityId}/photos/{photoId}")

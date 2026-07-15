@@ -36,6 +36,8 @@ export const activityPhotosApi = {
     if (data.captured_at) form.set('captured_at', data.captured_at)
     if (data.latitude != null) form.set('latitude', String(data.latitude))
     if (data.longitude != null) form.set('longitude', String(data.longitude))
+    const clientTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    if (clientTimezone) form.set('client_timezone', clientTimezone)
     return apiRequest<ActivityPhoto>(`/activities/${activityId}/photos`, {
       method: 'POST',
       body: form,

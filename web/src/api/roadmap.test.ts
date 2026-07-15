@@ -48,6 +48,7 @@ describe('Roadmap-API-Verträge', () => {
     expect(body.get('caption')).toBe('Passhöhe')
     expect(body.get('captured_at')).toBe('2026-07-10T08:30:00.000Z')
     expect(body.get('latitude')).toBe('47.1')
+    expect(body.get('client_timezone')).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone)
   })
 
   it('lädt file_url mit dem angemeldeten Zugriffstoken', async () => {

@@ -41,6 +41,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.time.ZoneId
 import retrofit2.HttpException
 
 interface AventoRepository {
@@ -296,6 +297,7 @@ class DefaultAventoRepository(
             capturedAt = capturedAt.partOrNull(TEXT_MEDIA_TYPE),
             latitude = latitude?.toString()?.toRequestBody(TEXT_MEDIA_TYPE),
             longitude = longitude?.toString()?.toRequestBody(TEXT_MEDIA_TYPE),
+            clientTimezone = ZoneId.systemDefault().id.toRequestBody(TEXT_MEDIA_TYPE),
         )
     }
 

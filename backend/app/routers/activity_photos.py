@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from fastapi.responses import FileResponse
@@ -87,6 +88,7 @@ async def upload_activity_photo(
     captured_at: datetime | None = Form(default=None),
     latitude: float | None = Form(default=None, ge=-90, le=90),
     longitude: float | None = Form(default=None, ge=-180, le=180),
+    client_timezone: str | None = Form(default=None, max_length=100),
     caption: str | None = Form(default=None, max_length=1000),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -96,6 +98,12 @@ async def upload_activity_photo(
         raise HTTPException(status_code=422, detail="captured_at muss eine Zeitzone enthalten.")
     if (latitude is None) != (longitude is None):
         raise HTTPException(status_code=422, detail="Breiten- und Längengrad müssen gemeinsam angegeben werden.")
+    assumed_timezone = None
+    if client_timezone:
+        try:
+            assumed_timezone = ZoneInfo(client_timezone)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise HTTPException(status_code=422, detail="client_timezone ist keine gültige IANA-Zeitzone.") from None
     photo_count = db.scalar(
         select(func.count()).select_from(ActivityPhoto).where(
             ActivityPhoto.activity_id == activity_id,
@@ -127,7 +135,13 @@ async def upload_activity_photo(
     settings = get_settings()
     photo_id = uuid4_str()
     try:
-        stored = await run_in_threadpool(validate_and_store_photo, data, photo_id, settings.upload_dir)
+        stored = await run_in_threadpool(
+            validate_and_store_photo,
+            data,
+            photo_id,
+            settings.upload_dir,
+            assumed_timezone,
+        )
     except PhotoValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -143,9 +157,11 @@ async def upload_activity_photo(
         size_bytes=stored.size_bytes,
         width=stored.width,
         height=stored.height,
-        captured_at=captured_at.astimezone(timezone.utc) if captured_at else None,
-        latitude=latitude,
-        longitude=longitude,
+        captured_at=(captured_at or stored.captured_at).astimezone(timezone.utc)
+        if (captured_at or stored.captured_at)
+        else None,
+        latitude=latitude if latitude is not None else stored.latitude,
+        longitude=longitude if longitude is not None else stored.longitude,
         caption=normalized_caption,
     )
     db.add(photo)
