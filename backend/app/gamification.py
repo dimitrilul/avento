@@ -1594,17 +1594,33 @@ def discovery_summary_payload(discoveries: list[GamificationDiscovery]) -> list[
     grouped: dict[str, list[GamificationDiscovery]] = defaultdict(list)
     for discovery in discoveries:
         grouped[discovery.kind].append(discovery)
+
+    def unique_items(items: Iterable[GamificationDiscovery]) -> list[GamificationDiscovery]:
+        """Collapse legacy/provider duplicates before exposing counts and names."""
+        unique: dict[tuple[str, str, str], GamificationDiscovery] = {}
+        for item in items:
+            name = " ".join(item.name.split()).casefold()
+            # A country is identified by its name/code, not by an incidental
+            # region value returned by one geocoder response.
+            context = "" if item.kind == "country" else " ".join((item.region or "").split()).casefold()
+            country = "" if item.kind == "country" else (item.country_code or "").casefold()
+            key = (name, context, country)
+            current = unique.get(key)
+            if current is None or item.first_discovered_at < current.first_discovered_at:
+                unique[key] = item
+        return sorted(unique.values(), key=lambda item: (_aware(item.first_discovered_at), item.name.casefold()))
+
     # Cities and municipalities are shown together in the UI, while the API
     # keeps both source types intact for future filtering.
-    city_items = grouped.get("city", []) + grouped.get("municipality", [])
+    city_items = unique_items(grouped.get("city", []) + grouped.get("municipality", []))
     output: list[dict[str, Any]] = []
     for scope, items, label in (
-        ("village", grouped.get("village", []), labels["village"]),
+        ("village", unique_items(grouped.get("village", [])), labels["village"]),
         ("municipality", city_items, "Städte & Kommunen"),
-        ("state", grouped.get("state", []), labels["state"]),
-        ("country", grouped.get("country", []), labels["country"]),
+        ("state", unique_items(grouped.get("state", [])), labels["state"]),
+        ("country", unique_items(grouped.get("country", [])), labels["country"]),
     ):
-        output.append({"scope": scope, "label": label, "count": len(items), "total_available": None, "progress_percent": None, "places": [item.name for item in items[:20]]})
+        output.append({"scope": scope, "label": label, "count": len(items), "total_available": None, "progress_percent": None, "places": [item.name for item in items]})
     return output
 
 
