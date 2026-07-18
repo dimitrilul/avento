@@ -182,6 +182,9 @@ class Activity(Base):
     ai_provider: Mapped[str | None] = mapped_column(String(80), nullable=True)
     ai_data_basis: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     ai_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    data_quality_flags: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    metric_provenance: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    include_in_statistics: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
@@ -208,6 +211,20 @@ class ImportJob(Base):
     warnings: Mapped[list[str]] = mapped_column(JSON, default=list)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     activity_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class SavedSegment(Base):
+    __tablename__ = "saved_segments"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4_str)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    activity_id: Mapped[str] = mapped_column(ForeignKey("activities.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    start_m: Mapped[float] = mapped_column(Float)
+    end_m: Mapped[float] = mapped_column(Float)
+    route_signature: Mapped[list[str]] = mapped_column(JSON, default=list)
+    metrics: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

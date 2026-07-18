@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import io
+import zipfile
 from typing import Any
 
 import httpx
@@ -74,6 +76,36 @@ def test_activity_crud_analysis_weather_summary_and_statistics(client: TestClien
     deleted = client.delete(f"/api/v1/activities/{activity_id}", headers=auth)
     assert deleted.status_code == 204
     assert client.get(f"/api/v1/activities/{activity_id}", headers=auth).status_code == 404
+
+
+def test_quality_exclusion_export_and_saved_segment(client: TestClient, auth: dict[str, str]):
+    uploaded = client.post(
+        "/api/v1/activities",
+        headers=auth,
+        files={"file": ("export-ride.tcx", SAMPLE_TCX, "application/xml")},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    activity = uploaded.json()
+    activity_id = activity["id"]
+    assert activity["metric_provenance"]["distance"]["source"] == "TCX/FIT/GPX"
+    assert any(flag["code"] == "missing_power" for flag in activity["data_quality_flags"]) is False
+
+    excluded = client.patch(f"/api/v1/activities/{activity_id}", headers=auth, json={"include_in_statistics": False})
+    assert excluded.status_code == 200
+    assert client.get("/api/v1/statistics/overview", headers=auth).json()["activity_count"] == 0
+
+    archive = client.post("/api/v1/activities/export", headers=auth, json={"activity_ids": [activity_id], "redact_private_data": True})
+    assert archive.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(archive.content)) as files:
+        names = files.namelist()
+        assert "manifest.json" in names
+        assert any(name.endswith(".csv") for name in names)
+        assert not any(name.startswith("original/") for name in names)
+
+    segment = client.post("/api/v1/segments", headers=auth, json={"activity_id": activity_id, "name": "Kernstück", "start_m": 0, "end_m": 300})
+    assert segment.status_code == 201, segment.text
+    assert segment.json()["metrics"]["distance_m"] == 300
+    assert client.get("/api/v1/segments", headers=auth).json()[0]["name"] == "Kernstück"
 
 
 def test_users_cannot_access_each_others_activities(client: TestClient, auth: dict[str, str]):

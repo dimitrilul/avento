@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+import csv
+import io
+import json
+import zipfile
+import xml.etree.ElementTree as ET
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -27,11 +32,13 @@ from ..analysis import (
     normalized_profile,
     route_wind_summary,
 )
+from ..data_quality import assess_track_quality, provenance_for_activity
+from ..route_segments import route_similarity, route_signature, segment_metrics
 from ..activity_geography import refresh_activity_geography
 from ..config import get_settings
 from ..database import SessionLocal, get_db
 from ..deps import get_current_user
-from ..models import Activity, ActivityPhoto, ImportJob, User, utcnow
+from ..models import Activity, ActivityPhoto, ImportJob, SavedSegment, User, utcnow
 from ..photo_storage import (
     finalize_staged_photo_deletions,
     restore_staged_photo_deletions,
@@ -40,6 +47,9 @@ from ..photo_storage import (
 from ..schemas import (
     ActivityListResponse,
     ActivityResponse,
+    ActivityExportRequest,
+    SavedSegmentCreate,
+    SavedSegmentResponse,
     ActivityUpdate,
     CompareRequest,
     CompareResponse,
@@ -56,6 +66,54 @@ from ..weather_classification import classify_route_weather
 
 
 router = APIRouter(tags=["Aktivitäten"])
+
+
+def _export_points(activity: Activity, redact: bool) -> list[dict[str, Any]]:
+    points = [dict(point) for point in (activity.track_points or [])]
+    if redact and points:
+        # Hide the start/end area in portable exports while retaining the
+        # middle of the route for analysis and interoperability.
+        edge = min(5, max(1, len(points) // 10))
+        for point in points[:edge] + points[-edge:]:
+            point["latitude"] = None
+            point["longitude"] = None
+    return points
+
+
+def _activity_export_archive(activities: list[Activity], *, include_original: bool, redact: bool) -> bytes:
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as output:
+        manifest = []
+        for activity in activities:
+            points = _export_points(activity, redact)
+            stem = "-".join(part for part in activity.title.lower().split() if part.isalnum())[:48] or activity.id[:8]
+            prefix = f"{stem}-{activity.id[:8]}"
+            rows = io.StringIO()
+            writer = csv.writer(rows)
+            writer.writerow(["time", "latitude", "longitude", "altitude_m", "distance_m", "speed_mps", "heart_rate_bpm", "cadence_rpm", "power_w"])
+            for point in points:
+                writer.writerow([point.get(key) for key in ("time", "latitude", "longitude", "altitude_m", "distance_m", "speed_mps", "heart_rate_bpm", "cadence_rpm", "power_w")])
+            output.writestr(f"{prefix}.csv", rows.getvalue())
+            output.writestr(f"{prefix}.json", json.dumps({"activity": _activity_response(activity).model_dump(mode="json"), "points": points}, ensure_ascii=False, indent=2))
+            gpx = ET.Element("gpx", {"version": "1.1", "creator": "Avento", "xmlns": "http://www.topografix.com/GPX/1/1"})
+            track = ET.SubElement(ET.SubElement(gpx, "trk"), "trkseg")
+            for point in points:
+                if point.get("latitude") is None or point.get("longitude") is None:
+                    continue
+                node = ET.SubElement(track, "trkpt", lat=str(point["latitude"]), lon=str(point["longitude"]))
+                if point.get("altitude_m") is not None: ET.SubElement(node, "ele").text = str(point["altitude_m"])
+                if point.get("time"): ET.SubElement(node, "time").text = str(point["time"])
+            output.writestr(f"{prefix}.gpx", ET.tostring(gpx, encoding="unicode", xml_declaration=True))
+            if include_original and not redact:
+                original = Path(activity.original_file_path)
+                if original.is_file(): output.writestr(f"original/{prefix}{original.suffix.lower()}", original.read_bytes())
+            manifest.append({"id": activity.id, "title": activity.title, "redacted": redact, "quality_flags": activity.data_quality_flags or []})
+        output.writestr("manifest.json", json.dumps({"schema_version": "1.0", "generated_by": "Avento", "activities": manifest}, ensure_ascii=False, indent=2))
+    return archive.getvalue()
+
+
+def _saved_segment_response(segment: SavedSegment) -> SavedSegmentResponse:
+    return SavedSegmentResponse(id=segment.id, activity_id=segment.activity_id, name=segment.name, start_m=segment.start_m, end_m=segment.end_m, route_signature=segment.route_signature or [], metrics=segment.metrics or {}, created_at=segment.created_at, updated_at=segment.updated_at)
 
 
 def _local_midnight(value: date, timezone_name: str) -> datetime:
@@ -104,6 +162,9 @@ def _activity_response(activity: Activity) -> ActivityResponse:
         ai_summary=activity.ai_summary,
         ai_provider=activity.ai_provider,
         ai_data_basis=activity.ai_data_basis if activity.ai_summary else None,
+        data_quality_flags=activity.data_quality_flags or [],
+        metric_provenance=activity.metric_provenance or {},
+        include_in_statistics=activity.include_in_statistics,
         created_at=activity.created_at,
         updated_at=activity.updated_at,
     )
@@ -199,6 +260,8 @@ def _apply_analysis(activity: Activity, parsed: ParsedActivity) -> None:
     activity.training_load = parsed.training_load
     activity.hr_zone_seconds = parsed.hr_zone_seconds
     activity.track_points = parsed.track_points
+    activity.data_quality_flags = assess_track_quality(activity.track_points or [], distance_m=activity.distance_m, duration_s=activity.duration_s)
+    activity.metric_provenance = provenance_for_activity(activity.track_points or [], activity.data_quality_flags)
     _invalidate_summary(activity)
 
 
@@ -446,6 +509,79 @@ def list_activities(
     )
 
 
+@router.post("/activities/export")
+def export_activities(
+    payload: ActivityExportRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    if payload.date_from and payload.date_to and payload.date_to < payload.date_from:
+        raise HTTPException(status_code=422, detail="Das Enddatum muss am oder nach dem Startdatum liegen.")
+    conditions: list[Any] = [Activity.user_id == current_user.id]
+    if payload.activity_ids:
+        conditions.append(Activity.id.in_(list(dict.fromkeys(payload.activity_ids))))
+    timezone_name = get_settings().timezone
+    if payload.date_from:
+        conditions.append(Activity.started_at >= _local_midnight(payload.date_from, timezone_name))
+    if payload.date_to:
+        conditions.append(Activity.started_at < _local_midnight(payload.date_to + timedelta(days=1), timezone_name))
+    activities = db.scalars(select(Activity).where(*conditions).order_by(Activity.started_at)).all()
+    if not activities:
+        raise HTTPException(status_code=404, detail="Keine Aktivitäten für den Export gefunden.")
+    if len(activities) > 200:
+        raise HTTPException(status_code=413, detail="Für einen Export sind höchstens 200 Aktivitäten gleichzeitig möglich.")
+    content = _activity_export_archive(activities, include_original=payload.include_original, redact=payload.redact_private_data)
+    return Response(content=content, media_type="application/zip", headers={"Content-Disposition": "attachment; filename=avento-export.zip"})
+
+
+@router.get("/segments", response_model=list[SavedSegmentResponse])
+def list_saved_segments(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[SavedSegmentResponse]:
+    segments = db.scalars(select(SavedSegment).where(SavedSegment.user_id == current_user.id).order_by(SavedSegment.updated_at.desc())).all()
+    return [_saved_segment_response(segment) for segment in segments]
+
+
+@router.post("/segments", response_model=SavedSegmentResponse, status_code=status.HTTP_201_CREATED)
+def create_saved_segment(payload: SavedSegmentCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> SavedSegmentResponse:
+    activity = _activity_for_user(db, current_user, payload.activity_id)
+    if payload.end_m > activity.distance_m:
+        raise HTTPException(status_code=422, detail="Das Segment liegt außerhalb der Aktivität.")
+    segment_points = [point for point in (activity.track_points or []) if payload.start_m <= float(point.get("distance_m") or 0) <= payload.end_m]
+    segment = SavedSegment(user_id=current_user.id, activity_id=activity.id, name=payload.name.strip(), start_m=payload.start_m, end_m=payload.end_m, route_signature=route_signature(segment_points), metrics=segment_metrics(activity.track_points or [], payload.start_m, payload.end_m))
+    db.add(segment)
+    db.commit()
+    db.refresh(segment)
+    return _saved_segment_response(segment)
+
+
+@router.delete("/segments/{segment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_saved_segment(segment_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> Response:
+    segment = db.scalar(select(SavedSegment).where(SavedSegment.id == segment_id, SavedSegment.user_id == current_user.id))
+    if segment is None: raise HTTPException(status_code=404, detail="Segment nicht gefunden.")
+    db.delete(segment)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/activities/{activity_id}/route-matches")
+def route_matches(activity_id: str, limit: int = Query(default=5, ge=1, le=20), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    activity = _activity_for_user(db, current_user, activity_id)
+    candidates = db.scalars(select(Activity).where(Activity.user_id == current_user.id, Activity.id != activity.id, Activity.include_in_statistics.is_(True)).order_by(Activity.started_at.desc()).limit(100)).all()
+    matches = []
+    for candidate in candidates:
+        similarity = route_similarity(activity.track_points or [], candidate.track_points or [])
+        if similarity < 0.35: continue
+        conditions: list[str] = []
+        if abs(candidate.distance_m - activity.distance_m) / max(activity.distance_m, 1) > .15: conditions.append("andere Distanz")
+        if abs(candidate.elevation_gain_m - activity.elevation_gain_m) > 150: conditions.append("andere Höhenmeter")
+        if activity.avg_hr_bpm is None or candidate.avg_hr_bpm is None: conditions.append("Herzfrequenz fehlt")
+        left_wind = ((activity.weather or {}).get("route_wind") or {}).get("net_headwind_kmh")
+        right_wind = ((candidate.weather or {}).get("route_wind") or {}).get("net_headwind_kmh")
+        if isinstance(left_wind, (int, float)) and isinstance(right_wind, (int, float)) and abs(left_wind - right_wind) > 8: conditions.append("deutlich anderer Wind")
+        matches.append({"activity": _activity_response(candidate).model_dump(mode="json"), "similarity": similarity, "comparable": not conditions, "conditions": conditions})
+    matches.sort(key=lambda item: (item["comparable"], item["similarity"]), reverse=True)
+    return {"activity_id": activity.id, "matches": matches[:limit]}
+
+
 @router.post("/activities/compare", response_model=CompareResponse)
 def compare_activities(
     payload: CompareRequest,
@@ -510,6 +646,8 @@ def update_activity(
         activity.notes = values["notes"].strip() if values["notes"] and values["notes"].strip() else None
     if "hydration_ml" in values:
         activity.hydration_ml = values["hydration_ml"]
+    if "include_in_statistics" in values:
+        activity.include_in_statistics = values["include_in_statistics"]
     if values:
         _invalidate_summary(activity)
         _invalidate_later_summaries(db, activity)
@@ -693,6 +831,7 @@ def statistics_overview(
     if start is None:
         earliest_conditions = [
             Activity.user_id == current_user.id,
+            Activity.include_in_statistics.is_(True),
             Activity.started_at < _local_midnight(end + timedelta(days=1), timezone_name),
         ]
         if activity_type:
@@ -707,6 +846,7 @@ def statistics_overview(
         raise HTTPException(status_code=422, detail="Statistikzeiträume vor 1900 werden nicht unterstützt.")
     current_conditions = [
         Activity.user_id == current_user.id,
+        Activity.include_in_statistics.is_(True),
         Activity.started_at >= _local_midnight(start, timezone_name),
         Activity.started_at < _local_midnight(end + timedelta(days=1), timezone_name),
     ]
@@ -723,6 +863,7 @@ def statistics_overview(
     previous_from = previous_to - timedelta(days=span - 1)
     previous_conditions = [
         Activity.user_id == current_user.id,
+        Activity.include_in_statistics.is_(True),
         Activity.started_at >= _local_midnight(previous_from, timezone_name),
         Activity.started_at < _local_midnight(previous_to + timedelta(days=1), timezone_name),
     ]

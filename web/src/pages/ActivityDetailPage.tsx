@@ -24,6 +24,8 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
+  Checkbox,
   FormControl,
   IconButton,
   InputLabel,
@@ -38,9 +40,10 @@ import {
 } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom'
-import { activitiesApi, insightsApi, type Activity, type ActivityUpdate, type PersonalRecordsResponse } from '../api'
+import { activitiesApi, insightsApi, segmentsApi, type Activity, type ActivityUpdate, type PersonalRecordsResponse } from '../api'
 import { ActivityCharts } from '../components/ActivityCharts'
 import { ActivityPhotoGallery } from '../components/ActivityPhotoGallery'
+import { RouteTextAlternative } from '../components/RouteTextAlternative'
 import { AiSummaryCard } from '../components/AiSummaryCard'
 import { MetricCard } from '../components/MetricCard'
 import { OverlayExportDialog } from '../components/OverlayExportDialog'
@@ -163,8 +166,11 @@ export function ActivityDetailPage() {
         <MetricCard label="Trinkmenge" value={formatHydration(item.hydration_ml)} icon={<WaterDropRoundedIcon />} accent={theme.palette.chart.blue} hint="während der Fahrt" />
       </Box>
 
+      {item.data_quality_flags?.length ? <Card sx={{ mb: 3 }}><CardContent sx={{ p: 2.5 }}><Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" gap={1.5}><Box><Typography variant="h3">Datenqualität & Herkunft</Typography><Typography variant="body2" color="text.secondary">Messwerte werden mit ihrer Herkunft und bekannten Einschränkungen ausgewiesen.</Typography></Box><Chip color={item.data_quality_flags.some((flag) => flag.severity === 'error') ? 'error' : 'warning'} label={`${item.data_quality_flags.length} Hinweis${item.data_quality_flags.length === 1 ? '' : 'e'}`} /></Stack><Stack spacing={.75} sx={{ mt: 1.75 }}>{item.data_quality_flags.map((flag) => <Typography key={flag.code} variant="body2"><strong>{flag.severity === 'error' ? 'Fehler' : flag.severity === 'warning' ? 'Warnung' : 'Info'}:</strong> {flag.message}</Typography>)}</Stack></CardContent></Card> : null}
+
       <Card sx={{ overflow: 'hidden', mb: 3 }}>
         {track.isLoading ? <ContentLoading label="Strecke wird geladen …" /> : track.isError ? <Box sx={{ p: 3 }}><ErrorState error={track.error} onRetry={() => void track.refetch()} /></Box> : <TrackMap points={points} />}
+        {!track.isLoading && !track.isError && <Box sx={{ p: { xs: 2, md: 2.5 } }}><RouteTextAlternative points={points} /><SavedSegmentForm activityId={item.id} distanceM={item.distance_m} /></Box>}
       </Card>
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2.5, mb: 3 }}>
@@ -226,8 +232,8 @@ function achievementForActivity(activityId: string, records?: PersonalRecordsRes
 
 function EditActivityDialog({ open, onClose, activity }: { open: boolean; onClose: () => void; activity: Activity }) {
   const client = useQueryClient()
-  const [values, setValues] = useState<ActivityUpdate>({ title: activity.title, type: activity.type, notes: activity.notes, hydration_ml: activity.hydration_ml })
-  useEffect(() => setValues({ title: activity.title, type: activity.type, notes: activity.notes, hydration_ml: activity.hydration_ml }), [activity])
+  const [values, setValues] = useState<ActivityUpdate>({ title: activity.title, type: activity.type, notes: activity.notes, hydration_ml: activity.hydration_ml, include_in_statistics: activity.include_in_statistics !== false })
+  useEffect(() => setValues({ title: activity.title, type: activity.type, notes: activity.notes, hydration_ml: activity.hydration_ml, include_in_statistics: activity.include_in_statistics !== false }), [activity])
   const mutation = useMutation({
     mutationFn: () => activitiesApi.update(activity.id, values),
     onSuccess: async (updated) => {
@@ -252,6 +258,7 @@ function EditActivityDialog({ open, onClose, activity }: { open: boolean; onClos
           helperText="In Millilitern, zum Beispiel 750 ml. Leer lassen, wenn die Menge nicht erfasst wurde."
         />
         <TextField label="Private Notizen" multiline minRows={5} fullWidth value={values.notes ?? ''} onChange={(event) => setValues((current) => ({ ...current, notes: event.target.value }))} />
+        <FormControlLabel control={<Checkbox checked={values.include_in_statistics !== false} onChange={(_, checked) => setValues((current) => ({ ...current, include_in_statistics: checked }))} />} label="In Statistiken und Zielberechnungen berücksichtigen" />
         {mutation.isError && <Alert severity="error">{errorMessage(mutation.error)}</Alert>}
       </Stack></DialogContent>
       <DialogActions sx={{ px: 3, pb: 3 }}><Button color="inherit" onClick={onClose}>Abbrechen</Button><Button variant="contained" disabled={mutation.isPending || !values.title?.trim() || (values.hydration_ml != null && (values.hydration_ml < 0 || values.hydration_ml > 20000))} onClick={() => mutation.mutate()}>{mutation.isPending ? 'Wird gespeichert …' : 'Speichern'}</Button></DialogActions>
@@ -267,4 +274,12 @@ function HeartRateZones({ activity }: { activity: Activity }) {
       {zones.length ? <Stack spacing={1.25}>{zones.map(([zone, seconds], index) => <Box key={zone}><Stack direction="row" justifyContent="space-between"><Typography variant="body2" fontWeight={700}>{zone}</Typography><Typography variant="body2" color="text.secondary">{formatDuration(seconds)}</Typography></Stack><Box sx={{ mt: .6, height: 7, borderRadius: 4, bgcolor: 'action.hover', overflow: 'hidden' }}><Box sx={{ width: `${total ? seconds / total * 100 : 0}%`, height: '100%', bgcolor: ['#4D82BC', '#0E6562', '#A5C838', '#E9A23B', '#E26D5A'][index % 5] }} /></Box></Box>)}</Stack> : <Typography color="text.secondary">Keine Herzfrequenzzonen verfügbar.</Typography>}
     </CardContent></Card>
   )
+}
+
+function SavedSegmentForm({ activityId, distanceM }: { activityId: string; distanceM: number }) {
+  const [name, setName] = useState('')
+  const [start, setStart] = useState(0)
+  const [end, setEnd] = useState(Math.round(distanceM))
+  const mutation = useMutation({ mutationFn: () => segmentsApi.create({ activity_id: activityId, name: name.trim() || 'Gespeichertes Segment', start_m: start, end_m: end }), onSuccess: () => setName('') })
+  return <Box component="form" onSubmit={(event) => { event.preventDefault(); if (end > start) mutation.mutate() }} sx={{ mt: 2, p: 1.5, borderRadius: 2, bgcolor: 'action.hover' }}><Typography variant="body2" fontWeight={750}>Segment speichern</Typography><Stack direction={{ xs: 'column', sm: 'row' }} gap={1} sx={{ mt: 1 }}><TextField size="small" label="Name" value={name} onChange={(event) => setName(event.target.value)} /><TextField size="small" type="number" label="Start (m)" value={start} onChange={(event) => setStart(Number(event.target.value))} inputProps={{ min: 0, max: distanceM }} /><TextField size="small" type="number" label="Ende (m)" value={end} onChange={(event) => setEnd(Number(event.target.value))} inputProps={{ min: 1, max: distanceM }} /><Button type="submit" variant="outlined" disabled={mutation.isPending || end <= start}>Speichern</Button></Stack>{mutation.isSuccess && <Typography variant="caption" color="success.main">Segment gespeichert und für spätere Vergleiche verfügbar.</Typography>}{mutation.isError && <Typography variant="caption" color="error.main">Segment konnte nicht gespeichert werden.</Typography>}</Box>
 }

@@ -19,7 +19,7 @@ import {
 } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import { Link as RouterLink, useOutletContext } from 'react-router-dom'
-import { activitiesApi, insightsApi, statisticsApi, type StatisticsGranularity } from '../api'
+import { activitiesApi, gamificationApi, insightsApi, statisticsApi, type StatisticsGranularity } from '../api'
 import { useAuth } from '../auth/AuthContext'
 import { EmptyState, ErrorState } from '../components/States'
 import { TrackMap } from '../components/TrackMap'
@@ -61,12 +61,14 @@ export function MinimalDashboardPage() {
   const recent = useQuery({ queryKey: ['activities', { limit: 6 }], queryFn: () => activitiesApi.list({ limit: 6 }) })
   const trendActivities = useQuery({ queryKey: ['activities', 'dashboard-trend', range.from, range.to], queryFn: () => activitiesApi.list({ date_from: range.from, date_to: range.to, limit: 200 }) })
   const insights = useQuery({ queryKey: ['statistics', 'insights', range.from, range.to], queryFn: () => insightsApi.longTerm(range.from, range.to) })
+  const goals = useQuery({ queryKey: ['gamification', 'overview'], queryFn: gamificationApi.overview })
   const lastActivity = recent.data?.items[0]
   const lastTrack = useQuery({ queryKey: ['activity', lastActivity?.id, 'track'], queryFn: () => activitiesApi.track(lastActivity!.id), enabled: Boolean(lastActivity?.id) })
 
-  const weeklyTargetKm = 100
+  const weeklyDistanceGoal = goals.data?.goals.find((goal) => goal.status === 'active' && goal.metric === 'distance_m' && goal.period === 'week')
+  const weeklyTargetKm = weeklyDistanceGoal ? weeklyDistanceGoal.target_value / 1000 : null
   const weeklyDistanceKm = (week.data?.distance_m ?? 0) / 1000
-  const weeklyProgress = Math.min(100, weeklyDistanceKm / weeklyTargetKm * 100)
+  const weeklyProgress = weeklyTargetKm ? Math.min(100, weeklyDistanceKm / weeklyTargetKm * 100) : 0
   const distanceChange = trend.data?.comparison?.changes.distance_m
   const chartData = useMemo(() => {
     if (trend.data?.series?.length) return trend.data.series.map((point) => ({
@@ -102,7 +104,7 @@ export function MinimalDashboardPage() {
             <>
               <Stack direction="row" alignItems="baseline" gap={1.25} flexWrap="wrap" sx={{ mt: 2 }}>
                 <Typography sx={{ fontSize: 'clamp(3.2rem, 9vw, 6.4rem)', lineHeight: .95, letterSpacing: '-.07em', fontWeight: 670 }}>{weeklyDistanceKm.toLocaleString('de-DE', { maximumFractionDigits: 1 })}</Typography>
-                <Typography color="text.secondary" sx={{ fontSize: '1.2rem' }}>km von {weeklyTargetKm} km</Typography>
+                <Typography color="text.secondary" sx={{ fontSize: '1.2rem' }}>{weeklyTargetKm ? `km von ${weeklyTargetKm.toLocaleString('de-DE', { maximumFractionDigits: 1 })} km` : 'km · kein Wochenziel'}</Typography>
               </Stack>
               <LinearProgress variant="determinate" value={weeklyProgress} aria-label="Wochenfortschritt" sx={{ height: 6, borderRadius: 999, mt: 3, maxWidth: 720 }} />
             </>

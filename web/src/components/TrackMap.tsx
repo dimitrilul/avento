@@ -306,5 +306,5 @@ export function TrackMap({
     )
   }
 
-  return <Box ref={container} role="region" aria-label="Karte der gefahrenen Strecke" data-map-variant={variant} sx={{ width: '100%', height, minHeight: 240, '& .maplibregl-ctrl button:focus-visible': { outline: '2px solid #65C8C1', outlineOffset: 2 } }} />
+  return <Box ref={container} role="region" tabIndex={0} aria-label="Karte der gefahrenen Strecke. Eine Textalternative ist darunter verfügbar." data-map-variant={variant} sx={{ width: '100%', height, minHeight: 240, '& .maplibregl-ctrl button:focus-visible': { outline: '2px solid #65C8C1', outlineOffset: 2 } }} />
 }

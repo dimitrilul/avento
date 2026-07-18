@@ -15,7 +15,7 @@ def test_alembic_revision_graph_is_connected() -> None:
     config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
     revisions = ScriptDirectory.from_config(config)
 
-    assert revisions.get_heads() == ["0012_activity_photo_originals"]
+    assert revisions.get_heads() == ["0015_saved_segments"]
     assert revisions.get_revision("0010").down_revision == "0009_google_health"
     assert [revision.revision for revision in revisions.walk_revisions()]
 
@@ -35,4 +35,4 @@ def test_alembic_upgrade_head_on_fresh_sqlite(tmp_path: Path, monkeypatch) -> No
         columns = {row[1] for row in connection.execute("PRAGMA table_info(activities)")}
         revision = connection.execute("SELECT version_num FROM alembic_version").fetchone()
     assert {"geography_data", "geography_status", "geography_updated_at"} <= columns
-    assert revision == ("0012_activity_photo_originals",)
+    assert revision == ("0015_saved_segments",)

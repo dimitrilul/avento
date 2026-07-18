@@ -150,6 +150,43 @@ export interface Activity {
   ai_provider?: string | null
   ai_data_basis?: AIDataBasis | null
   hydration_ml?: number | null
+  data_quality_flags?: ActivityQualityFlag[]
+  metric_provenance?: Record<string, { source: string; method: string; quality: string }>
+  include_in_statistics?: boolean
+}
+
+export interface ActivityQualityFlag {
+  code: string
+  severity: 'info' | 'warning' | 'error' | string
+  message: string
+  fields: string[]
+}
+
+export interface ActivityExportInput {
+  activity_ids?: string[]
+  date_from?: string
+  date_to?: string
+  include_original?: boolean
+  redact_private_data?: boolean
+}
+
+export interface SavedSegment {
+  id: string
+  activity_id: string
+  name: string
+  start_m: number
+  end_m: number
+  route_signature: string[]
+  metrics: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export interface RouteMatch {
+  activity: Activity
+  similarity: number
+  comparable: boolean
+  conditions: string[]
 }
 
 export interface ActivityDetail extends Activity {
@@ -177,6 +214,7 @@ export interface ActivityUpdate {
   type?: ActivityType | string
   notes?: string | null
   hydration_ml?: number | null
+  include_in_statistics?: boolean
 }
 
 export interface ImportActivityData extends ActivityUpdate {

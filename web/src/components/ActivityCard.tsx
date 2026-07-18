@@ -25,7 +25,11 @@ export function ActivityCard({ activity, selected, onSelect }: { activity: Activ
                 <Typography variant="h4" noWrap>{activity.title}</Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mt: .35 }}>{formatDateTime(activity.started_at)}</Typography>
               </Box>
-              <Chip size="small" label={activityTypeLabels[activity.type] ?? activity.type} />
+              <Stack direction="row" gap={.5} alignItems="center">
+                {(activity.data_quality_flags?.some((flag) => flag.severity === 'warning' || flag.severity === 'error')) && <Chip size="small" color="warning" label="Daten prüfen" />}
+                {activity.include_in_statistics === false && <Chip size="small" variant="outlined" label="Nicht in Statistik" />}
+                <Chip size="small" label={activityTypeLabels[activity.type] ?? activity.type} />
+              </Stack>
             </Stack>
             <Divider sx={{ my: 1.75 }} />
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 1.25 }}>

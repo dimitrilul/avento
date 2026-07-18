@@ -296,6 +296,9 @@ def activity_summary_data_basis(
                 )
             )
     limitations = []
+    for flag in activity.data_quality_flags or []:
+        if flag.get("severity") in {"warning", "error"}:
+            limitations.append(f"Datenqualität: {flag.get('message')}")
     if activity.avg_hr_bpm is None:
         limitations.append("Für die Fokusaktivität liegt keine durchschnittliche Herzfrequenz vor.")
     if activity.hydration_ml is None:

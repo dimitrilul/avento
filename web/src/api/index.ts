@@ -1,10 +1,11 @@
-import { apiRequest, tokenStore } from './client'
+import { apiBlobRequest, apiRequest, tokenStore } from './client'
 import type {
   Activity,
   ActivityComparison,
   ActivityDetail,
   ActivityFilters,
   ActivityUpdate,
+  ActivityExportInput,
   BootstrapData,
   ChatHistoryItem,
   ChatResponse,
@@ -25,6 +26,8 @@ import type {
   WeatherResponse,
   SummaryResponse,
   StatisticsGranularity,
+  SavedSegment,
+  RouteMatch,
 } from './types'
 
 function queryString(values: Record<string, string | number | undefined>) {
@@ -167,6 +170,15 @@ export const activitiesApi = {
       method: 'POST',
       body: { activity_ids: activityIds },
     }),
+  export: (input: ActivityExportInput) =>
+    apiBlobRequest('/activities/export', { method: 'POST', body: input }),
+  routeMatches: (id: string, limit = 5) => apiRequest<{ activity_id: string; matches: RouteMatch[] }>(`/activities/${id}/route-matches?limit=${limit}`),
+}
+
+export const segmentsApi = {
+  list: () => apiRequest<SavedSegment[]>('/segments'),
+  create: (input: { activity_id: string; name: string; start_m: number; end_m: number }) => apiRequest<SavedSegment>('/segments', { method: 'POST', body: input }),
+  delete: (id: string) => apiRequest<void>(`/segments/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 }
 
 export const statisticsApi = {

@@ -84,6 +84,7 @@ export function ComparePage() {
   }
 
   const result = compare.data?.activities ?? []
+  const routeMatches = useQuery({ queryKey: ['route-matches', result[0]?.id], queryFn: () => activitiesApi.routeMatches(result[0].id), enabled: result.length > 0 })
   const metrics: ActivityComparisonMetric[] = compare.data?.metrics?.length ? compare.data.metrics : result.map((activity) => ({
     activity_id: activity.id,
     title: activity.title,
@@ -153,6 +154,7 @@ export function ComparePage() {
 
       {result.length > 0 && (
         <Box sx={{ mt: 4 }}>
+          {routeMatches.data?.matches?.length ? <Card sx={{ mb: 2.5 }}><CardContent sx={{ p: { xs: 2, md: 2.5 } }}><Typography variant="h3">Wiederkehrende Strecke</Typography><Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>Ähnliche Routen werden trotz kleiner GPS-Abweichungen erkannt. Die Vergleichbarkeit wird pro Fahrt ausgewiesen.</Typography><Stack spacing={1}>{routeMatches.data.matches.map((match) => <Stack key={match.activity.id} direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" gap={1} sx={{ p: 1.25, borderRadius: 2, bgcolor: 'action.hover' }}><Box><Typography fontWeight={750}>{match.activity.title}</Typography><Typography variant="caption" color="text.secondary">Routenähnlichkeit {Math.round(match.similarity * 100)} %{match.conditions.length ? ` · ${match.conditions.join(', ')}` : ''}</Typography></Box><Chip size="small" color={match.comparable ? 'success' : 'warning'} label={match.comparable ? 'vergleichbar' : 'eingeschränkt vergleichbar'} /></Stack>)}</Stack></CardContent></Card> : null}
           <Card sx={{ mb: 2.5, background: `radial-gradient(circle at 100% 0, ${alpha(theme.palette.secondary.main, .22)}, transparent 34%), linear-gradient(145deg, ${alpha(theme.palette.primary.main, .07)}, ${theme.palette.background.paper})` }}>
             <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
               <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" gap={2}>

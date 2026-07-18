@@ -31,7 +31,7 @@ import {
 } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import { Link as RouterLink, useNavigate, useOutletContext } from 'react-router-dom'
-import { activitiesApi, insightsApi, statisticsApi, type Activity, type StatisticsGranularity } from '../api'
+import { activitiesApi, gamificationApi, insightsApi, statisticsApi, type Activity, type StatisticsGranularity } from '../api'
 import { useAuth } from '../auth/AuthContext'
 import { GamificationOverviewCard } from '../components/gamification/GamificationOverviewCard'
 import { EmptyState, ErrorState } from '../components/States'
@@ -103,13 +103,15 @@ export function DashboardPage() {
     queryKey: ['statistics', 'insights', range.from, range.to],
     queryFn: () => insightsApi.longTerm(range.from, range.to),
   })
+  const goals = useQuery({ queryKey: ['gamification', 'overview'], queryFn: gamificationApi.overview })
 
   const comparison = trend.data?.comparison
   const change = (key: string) => percent(comparison?.changes[key])
   const activities = recent.data?.items ?? []
-  const weeklyTargetKm = 100
+  const weeklyDistanceGoal = goals.data?.goals.find((goal) => goal.status === 'active' && goal.metric === 'distance_m' && goal.period === 'week')
+  const weeklyTargetKm = weeklyDistanceGoal ? weeklyDistanceGoal.target_value / 1000 : null
   const weeklyDistanceKm = (week.data?.distance_m ?? 0) / 1000
-  const weeklyProgress = Math.min(100, (weeklyDistanceKm / weeklyTargetKm) * 100)
+  const weeklyProgress = weeklyTargetKm ? Math.min(100, (weeklyDistanceKm / weeklyTargetKm) * 100) : 0
   const weatherActivity = activities.find((activity) => activity.weather?.temperature_c != null || activity.weather?.condition)
   const chartData = useMemo(() => {
     if (trend.data?.series?.length) return trend.data.series.map((point) => ({
@@ -183,7 +185,7 @@ export function DashboardPage() {
 
         <Stack spacing={2.5}>
           <CoachCard statement={insights.data?.fitness_trend.statement} loading={insights.isLoading} />
-          <WeekProgress distanceKm={weeklyDistanceKm} targetKm={weeklyTargetKm} progress={weeklyProgress} trainingLoad={week.data?.training_load ?? 0} loading={week.isLoading} />
+          <WeekProgress distanceKm={weeklyDistanceKm} targetKm={weeklyTargetKm} progress={weeklyProgress} trainingLoad={week.data?.training_load ?? 0} loading={week.isLoading || goals.isLoading} goalTitle={weeklyDistanceGoal?.title} />
         </Stack>
       </Box>
 
@@ -235,8 +237,8 @@ function CoachCard({ statement, loading }: { statement?: string; loading: boolea
   return <Card sx={{ flex: 1, background: (theme) => `linear-gradient(145deg, ${alpha(theme.palette.primary.main, .16)}, ${theme.palette.background.paper} 72%)` }}><CardContent sx={{ p: 2.5 }}><Stack direction="row" justifyContent="space-between"><Box><Typography variant="overline" color="primary.main" fontWeight={800}>AVENTO COACH</Typography><Typography variant="h3">Dein Trainingsimpuls</Typography></Box><Avatar sx={{ bgcolor: 'primary.main', color: 'primary.contrastText' }}><AutoAwesomeRoundedIcon /></Avatar></Stack>{loading ? <Skeleton variant="rounded" height={72} sx={{ mt: 2 }} /> : <Typography sx={{ mt: 2, lineHeight: 1.7 }}>{statement || 'Sammle noch ein paar Aktivitäten, damit Avento einen belastbaren persönlichen Trend für dich erkennt.'}</Typography>}<Button component={RouterLink} to="/coach" endIcon={<ArrowForwardRoundedIcon />} sx={{ mt: 1.5, px: 0 }}>Coach öffnen</Button></CardContent></Card>
 }
 
-function WeekProgress({ distanceKm, targetKm, progress, trainingLoad, loading }: { distanceKm: number; targetKm: number; progress: number; trainingLoad: number; loading: boolean }) {
-  return <Card><CardContent sx={{ p: 2.5 }}><Stack direction="row" justifyContent="space-between" alignItems="center"><Box><Typography variant="overline" color="primary.main" fontWeight={800}>WOCHENFORTSCHRITT</Typography><Typography variant="h3">{loading ? '–' : `${distanceKm.toLocaleString('de-DE', { maximumFractionDigits: 1 })} von ${targetKm} km`}</Typography></Box><Box sx={{ position: 'relative', display: 'inline-flex' }}><CircularProgress variant="determinate" value={progress} size={58} thickness={5} /><Box sx={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}><Typography variant="caption" fontWeight={800}>{Math.round(progress)}%</Typography></Box></Box></Stack><LinearProgress variant="determinate" value={progress} sx={{ mt: 2, height: 8, borderRadius: 8 }} /><Stack direction="row" justifyContent="space-between" alignItems="center" gap={1} sx={{ mt: 1 }}><Typography variant="caption" color="text.secondary">{Math.max(0, targetKm - distanceKm).toLocaleString('de-DE', { maximumFractionDigits: 1 })} km bis zum Wochenziel</Typography><Chip size="small" icon={<TrendingUpRoundedIcon />} label={`Belastung ${Math.round(trainingLoad)}`} /></Stack></CardContent></Card>
+function WeekProgress({ distanceKm, targetKm, progress, trainingLoad, loading, goalTitle }: { distanceKm: number; targetKm: number | null; progress: number; trainingLoad: number; loading: boolean; goalTitle?: string }) {
+  return <Card><CardContent sx={{ p: 2.5 }}><Stack direction="row" justifyContent="space-between" alignItems="center"><Box><Typography variant="overline" color="primary.main" fontWeight={800}>ZIELFORTSCHRITT</Typography><Typography variant="h3">{loading ? '–' : targetKm ? `${distanceKm.toLocaleString('de-DE', { maximumFractionDigits: 1 })} von ${targetKm.toLocaleString('de-DE', { maximumFractionDigits: 1 })} km` : 'Kein Wochenziel konfiguriert'}</Typography>{goalTitle && <Typography variant="caption" color="text.secondary">{goalTitle}</Typography>}</Box><Box sx={{ position: 'relative', display: 'inline-flex' }}><CircularProgress variant="determinate" value={progress} size={58} thickness={5} /><Box sx={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}><Typography variant="caption" fontWeight={800}>{targetKm ? `${Math.round(progress)}%` : '–'}</Typography></Box></Box></Stack><LinearProgress variant="determinate" value={progress} sx={{ mt: 2, height: 8, borderRadius: 8 }} /><Stack direction="row" justifyContent="space-between" alignItems="center" gap={1} sx={{ mt: 1 }}><Typography variant="caption" color="text.secondary">{targetKm ? `${Math.max(0, targetKm - distanceKm).toLocaleString('de-DE', { maximumFractionDigits: 1 })} km bis zum Wochenziel` : 'Lege im Bereich Ziele ein Wochen- oder Monatsziel an.'}</Typography><Chip size="small" icon={<TrendingUpRoundedIcon />} label={`Belastung ${Math.round(trainingLoad)}`} /></Stack></CardContent></Card>
 }
 
 function RecordCard({ records, fallback, loading }: { records?: Awaited<ReturnType<typeof insightsApi.records>>; fallback?: Activity; loading: boolean }) {

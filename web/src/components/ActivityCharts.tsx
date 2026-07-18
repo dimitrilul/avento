@@ -1,4 +1,4 @@
-import { Box, Card, CardContent, Stack, Typography, useTheme } from '@mui/material'
+import { Box, Card, CardContent, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography, useTheme } from '@mui/material'
 import {
   Area,
   AreaChart,
@@ -40,7 +40,15 @@ export function ActivityCharts({ points }: { points: TrackPoint[] }) {
     : `Messpunkt ${Math.round(value)}`
 
   return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1fr 1fr' }, gap: 2.5 }}>
+    <Box component="section" aria-label="Aktivitätsdiagramme und Datentabelle">
+      <Box component="details" sx={{ mb: 2.5, border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 1.5, bgcolor: 'background.paper' }}>
+        <Box component="summary" sx={{ cursor: 'pointer', fontWeight: 750 }}>Tabellarische Ansicht der Messwerte</Box>
+        <Table size="small" sx={{ mt: 1 }} aria-label="Tabellarische Ansicht der Aktivitätsmesswerte">
+          <TableHead><TableRow><TableCell>Zeitpunkt</TableCell><TableCell align="right">Distanz</TableCell><TableCell align="right">Höhe</TableCell><TableCell align="right">Tempo</TableCell><TableCell align="right">Puls</TableCell></TableRow></TableHead>
+          <TableBody>{data.map((point, index) => <TableRow key={`${point.index}-${index}`}><TableCell>{point.index + 1}</TableCell><TableCell align="right">{point.distance.toLocaleString('de-DE', { maximumFractionDigits: 2 })} km</TableCell><TableCell align="right">{point.elevation == null ? '–' : `${point.elevation} m`}</TableCell><TableCell align="right">{point.speed == null ? '–' : `${point.speed} km/h`}</TableCell><TableCell align="right">{point.heartRate == null ? '–' : `${point.heartRate} bpm`}</TableCell></TableRow>)}</TableBody>
+        </Table>
+      </Box>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1fr 1fr' }, gap: 2.5 }}>
       <Card>
         <CardContent sx={{ p: 2.5 }}>
           <Stack sx={{ mb: 1 }}>
@@ -86,6 +94,7 @@ export function ActivityCharts({ points }: { points: TrackPoint[] }) {
           )}
         </CardContent>
       </Card>
+      </Box>
     </Box>
   )
 }

@@ -182,6 +182,7 @@ class ActivityUpdate(BaseModel):
     type: str | None = Field(default=None, min_length=1, max_length=50)
     notes: str | None = Field(default=None, max_length=10000)
     hydration_ml: int | None = Field(default=None, ge=0, le=20_000)
+    include_in_statistics: bool | None = None
 
 
 class ActivityResponse(BaseModel):
@@ -213,6 +214,9 @@ class ActivityResponse(BaseModel):
     ai_summary: str | None
     ai_provider: str | None
     ai_data_basis: AIDataBasis | None = None
+    data_quality_flags: list[dict[str, Any]] = Field(default_factory=list)
+    metric_provenance: dict[str, Any] = Field(default_factory=dict)
+    include_in_statistics: bool = True
     created_at: datetime
     updated_at: datetime
 
@@ -342,6 +346,38 @@ class StatisticsOverview(BaseModel):
 
 class CompareRequest(BaseModel):
     activity_ids: list[str] = Field(min_length=2, max_length=10)
+
+
+class ActivityExportRequest(BaseModel):
+    activity_ids: list[str] = Field(default_factory=list, max_length=200)
+    date_from: date | None = None
+    date_to: date | None = None
+    include_original: bool = True
+    redact_private_data: bool = False
+
+
+class SavedSegmentCreate(BaseModel):
+    activity_id: str
+    name: str = Field(min_length=1, max_length=120)
+    start_m: float = Field(ge=0)
+    end_m: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def ordered(self) -> "SavedSegmentCreate":
+        if self.end_m <= self.start_m: raise ValueError("Das Segmentende muss hinter dem Segmentstart liegen.")
+        return self
+
+
+class SavedSegmentResponse(BaseModel):
+    id: str
+    activity_id: str
+    name: str
+    start_m: float
+    end_m: float
+    route_signature: list[str]
+    metrics: dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
 
 
 class ComparisonMetric(BaseModel):
