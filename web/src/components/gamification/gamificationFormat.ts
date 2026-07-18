@@ -2,6 +2,7 @@ import type { GamificationMetric, GamificationPeriod } from '../../api'
 
 const decimal = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 })
 const integer = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 0 })
+const distanceKilometres = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 })
 
 export const gamificationMetricOptions: Array<{
   value: GamificationMetric
@@ -47,8 +48,12 @@ export function toApiTarget(metric: GamificationMetric, value: number) {
 }
 
 export function formatGamificationValue(metric: GamificationMetric, value: number, unit?: string | null) {
-  if (metric === 'distance_m') return `${decimal.format(value / 1000)} km`
-  if (metric === 'moving_time_s') return `${decimal.format(value / 3600)} Std.`
+  if (metric === 'distance_m') {
+    return value >= 1000
+      ? `${distanceKilometres.format(value / 1000)} km`
+      : `${integer.format(value)} m`
+  }
+  if (metric === 'moving_time_s') return `${integer.format(value / 3600)} Std.`
   if (metric === 'activity_count') return `${integer.format(value)} ${value === 1 ? 'Fahrt' : 'Fahrten'}`
   if (metric === 'places_visited') return `${integer.format(value)} ${value === 1 ? 'Ort' : 'Orte'}`
   if (metric === 'elevation_gain_m') return `${integer.format(value)} hm`
@@ -58,4 +63,3 @@ export function formatGamificationValue(metric: GamificationMetric, value: numbe
 export function formatXp(value: number) {
   return `${integer.format(value)} XP`
 }
-
