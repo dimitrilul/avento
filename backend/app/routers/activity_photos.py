@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -13,7 +14,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from ..config import get_settings
-from ..database import get_db
+from ..database import SessionLocal, get_db
 from ..deps import get_current_user
 from ..models import Activity, ActivityPhoto, User, uuid4_str
 from ..photo_storage import (
@@ -24,12 +25,14 @@ from ..photo_storage import (
     restore_staged_photo_deletions,
     safe_photo_path,
     stage_photo_deletions,
-    validate_and_store_photo,
+    validate_and_store_original,
+    create_optimized_photo,
 )
 from ..schemas import ActivityPhotoListResponse, ActivityPhotoResponse, ActivityPhotoUpdate
 
 
 router = APIRouter(tags=["Aktivitätsfotos"])
+logger = logging.getLogger(__name__)
 
 
 def _utc(value: datetime | None) -> datetime | None:
@@ -65,6 +68,7 @@ def _photo_response(photo: ActivityPhoto) -> ActivityPhotoResponse:
         original_filename=photo.original_filename,
         content_type=photo.content_type,
         size_bytes=photo.size_bytes,
+        original_size_bytes=photo.original_size_bytes,
         width=photo.width,
         height=photo.height,
         captured_at=_utc(photo.captured_at),
@@ -72,6 +76,8 @@ def _photo_response(photo: ActivityPhoto) -> ActivityPhotoResponse:
         longitude=photo.longitude,
         caption=photo.caption,
         file_url=f"/api/v1/activities/{photo.activity_id}/photos/{photo.id}/file",
+        original_file_url=f"/api/v1/activities/{photo.activity_id}/photos/{photo.id}/original",
+        processing_status=photo.processing_status,
         created_at=photo.created_at,
         updated_at=photo.updated_at,
     )
@@ -84,6 +90,7 @@ def _photo_response(photo: ActivityPhoto) -> ActivityPhotoResponse:
 )
 async def upload_activity_photo(
     activity_id: str,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     captured_at: datetime | None = Form(default=None),
     latitude: float | None = Form(default=None, ge=-90, le=90),
@@ -135,8 +142,8 @@ async def upload_activity_photo(
     settings = get_settings()
     photo_id = uuid4_str()
     try:
-        stored = await run_in_threadpool(
-            validate_and_store_photo,
+        original = await run_in_threadpool(
+            validate_and_store_original,
             data,
             photo_id,
             settings.upload_dir,
@@ -150,35 +157,69 @@ async def upload_activity_photo(
         id=photo_id,
         activity_id=activity_id,
         user_id=current_user.id,
-        storage_path=str(stored.path),
+        original_storage_path=str(original.path),
+        original_content_type=original.content_type,
+        original_size_bytes=original.size_bytes,
+        storage_path=None,
         original_filename=original_filename,
-        content_type=stored.content_type,
-        file_hash=stored.file_hash,
-        size_bytes=stored.size_bytes,
-        width=stored.width,
-        height=stored.height,
-        captured_at=(captured_at or stored.captured_at).astimezone(timezone.utc)
-        if (captured_at or stored.captured_at)
+        content_type="image/webp",
+        file_hash=original.file_hash,
+        size_bytes=original.size_bytes,
+        width=original.width,
+        height=original.height,
+        captured_at=(captured_at or original.captured_at).astimezone(timezone.utc)
+        if (captured_at or original.captured_at)
         else None,
-        latitude=latitude if latitude is not None else stored.latitude,
-        longitude=longitude if longitude is not None else stored.longitude,
+        latitude=latitude if latitude is not None else original.latitude,
+        longitude=longitude if longitude is not None else original.longitude,
         caption=normalized_caption,
+        processing_status="pending",
     )
     db.add(photo)
     try:
         db.commit()
     except IntegrityError:
         db.rollback()
-        staged = stage_photo_deletions([stored.path], settings.upload_dir)
+        staged = stage_photo_deletions([original.path], settings.upload_dir)
         finalize_staged_photo_deletions(staged)
         raise HTTPException(status_code=409, detail="Dieses Foto ist für die Aktivität bereits vorhanden.") from None
     except Exception:
         db.rollback()
-        staged = stage_photo_deletions([stored.path], settings.upload_dir)
+        staged = stage_photo_deletions([original.path], settings.upload_dir)
         finalize_staged_photo_deletions(staged)
         raise
     db.refresh(photo)
+    background_tasks.add_task(_optimize_photo_in_background, photo.id)
     return _photo_response(photo)
+
+
+def _optimize_photo_in_background(photo_id: str) -> None:
+    db = SessionLocal()
+    try:
+        photo = db.get(ActivityPhoto, photo_id)
+        if photo is None:
+            return
+        photo.processing_status = "processing"
+        db.commit()
+        settings = get_settings()
+        original_path = safe_photo_path(photo.original_storage_path, settings.upload_dir, must_exist=True)
+        optimized = create_optimized_photo(original_path, photo.id, settings.upload_dir)
+        photo.storage_path = str(optimized.path)
+        photo.content_type = optimized.content_type
+        photo.size_bytes = optimized.size_bytes
+        photo.width = optimized.width
+        photo.height = optimized.height
+        photo.processing_status = "ready"
+        db.commit()
+    except Exception:
+        db.rollback()
+        photo = db.get(ActivityPhoto, photo_id)
+        if photo is not None:
+            photo.processing_status = "failed"
+            db.commit()
+        logger.exception("Optimierung des Aktivitätsfotos %s fehlgeschlagen", photo_id)
+    finally:
+        db.close()
 
 
 @router.get("/activities/{activity_id}/photos", response_model=ActivityPhotoListResponse)
@@ -236,20 +277,44 @@ def get_activity_photo_file(
 ) -> FileResponse:
     _activity_for_user(db, current_user, activity_id)
     photo = _photo_for_user(db, current_user, activity_id, photo_id)
+    settings = get_settings()
+    optimized = bool(photo.storage_path)
     try:
-        path = safe_photo_path(photo.storage_path, get_settings().upload_dir, must_exist=True)
+        path = safe_photo_path(photo.storage_path, settings.upload_dir, must_exist=True) if optimized else safe_photo_path(photo.original_storage_path, settings.upload_dir, must_exist=True)
     except (ValueError, FileNotFoundError) as exc:
         raise HTTPException(status_code=404, detail="Die Fotodatei ist nicht verfügbar.") from exc
     return FileResponse(
         path,
-        media_type=photo.content_type,
-        filename=f"{photo.id}.webp",
+        media_type=photo.content_type if optimized else photo.original_content_type,
+        filename=f"{photo.id}.webp" if optimized else photo.original_filename,
         content_disposition_type="inline",
         headers={
             "Cache-Control": "private, max-age=3600",
-            "ETag": f'"{photo.file_hash}"',
+            "ETag": f'"{photo.file_hash}-{photo.processing_status}"',
             "X-Content-Type-Options": "nosniff",
         },
+    )
+
+
+@router.get("/activities/{activity_id}/photos/{photo_id}/original", response_class=FileResponse)
+def get_activity_photo_original(
+    activity_id: str,
+    photo_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    _activity_for_user(db, current_user, activity_id)
+    photo = _photo_for_user(db, current_user, activity_id, photo_id)
+    try:
+        path = safe_photo_path(photo.original_storage_path, get_settings().upload_dir, must_exist=True)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail="Die Originaldatei ist nicht verfügbar.") from exc
+    return FileResponse(
+        path,
+        media_type=photo.original_content_type,
+        filename=photo.original_filename,
+        content_disposition_type="inline",
+        headers={"Cache-Control": "private, max-age=3600", "ETag": f'"{photo.file_hash}-original"', "X-Content-Type-Options": "nosniff"},
     )
 
 
@@ -264,7 +329,9 @@ def delete_activity_photo(
     photo = _photo_for_user(db, current_user, activity_id, photo_id)
     settings = get_settings()
     try:
-        staged = stage_photo_deletions([photo.storage_path], settings.upload_dir)
+        staged = stage_photo_deletions(
+            [path for path in (photo.storage_path, photo.original_storage_path) if path], settings.upload_dir
+        )
     except (OSError, ValueError) as exc:
         raise HTTPException(status_code=409, detail="Die Fotodatei konnte nicht sicher entfernt werden.") from exc
     db.delete(photo)

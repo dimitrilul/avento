@@ -1,4 +1,4 @@
-import { apiBlobRequest, apiRequest } from './client'
+import { apiBlobRequest, apiRequest, apiUploadRequest } from './client'
 import type {
   ActivityPhoto,
   ActivityPhotoListResponse,
@@ -29,7 +29,7 @@ function queryString(values: Record<string, string | number | undefined>) {
 export const activityPhotosApi = {
   list: (activityId: string) =>
     apiRequest<ActivityPhotoListResponse>(`/activities/${activityId}/photos`),
-  upload: (activityId: string, data: ActivityPhotoUpload) => {
+  upload: (activityId: string, data: ActivityPhotoUpload, onProgress?: (percent: number) => void) => {
     const form = new FormData()
     form.set('file', data.file)
     if (data.caption?.trim()) form.set('caption', data.caption.trim())
@@ -38,10 +38,7 @@ export const activityPhotosApi = {
     if (data.longitude != null) form.set('longitude', String(data.longitude))
     const clientTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
     if (clientTimezone) form.set('client_timezone', clientTimezone)
-    return apiRequest<ActivityPhoto>(`/activities/${activityId}/photos`, {
-      method: 'POST',
-      body: form,
-    })
+    return apiUploadRequest<ActivityPhoto>(`/activities/${activityId}/photos`, form, onProgress)
   },
   update: (activityId: string, photoId: string, data: ActivityPhotoUpdate) =>
     apiRequest<ActivityPhoto>(`/activities/${activityId}/photos/${photoId}`, {

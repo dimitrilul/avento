@@ -58,6 +58,7 @@ export function ActivityPhotoGallery({ activityId, trackPoints, mapVariant = 'cl
   const [editPhoto, setEditPhoto] = useState<ActivityPhoto | null>(null)
   const [deletePhoto, setDeletePhoto] = useState<ActivityPhoto | null>(null)
   const [detailPhoto, setDetailPhoto] = useState<ActivityPhoto | null>(null)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const photos = useQuery({
     queryKey: ['activity', activityId, 'photos'],
     queryFn: () => activityPhotosApi.list(activityId),
@@ -65,10 +66,11 @@ export function ActivityPhotoGallery({ activityId, trackPoints, mapVariant = 'cl
   })
   const refresh = () => client.invalidateQueries({ queryKey: ['activity', activityId, 'photos'] })
   const upload = useMutation({
-    mutationFn: (data: ActivityPhotoUpload) => activityPhotosApi.upload(activityId, data),
+    mutationFn: (data: ActivityPhotoUpload) => activityPhotosApi.upload(activityId, data, setUploadProgress),
     onSuccess: async () => {
       await refresh()
       setUploadOpen(false)
+      setUploadProgress(0)
     },
   })
   const update = useMutation({
@@ -164,6 +166,7 @@ export function ActivityPhotoGallery({ activityId, trackPoints, mapVariant = 'cl
         mode="upload"
         open={uploadOpen}
         busy={upload.isPending}
+        progress={uploadProgress}
         error={upload.error}
         onClose={() => setUploadOpen(false)}
         onSubmit={(data) => upload.mutate(data as ActivityPhotoUpload)}
@@ -269,12 +272,13 @@ interface PhotoMetadataDialogProps {
   open: boolean
   photo?: ActivityPhoto | null
   busy: boolean
+  progress?: number
   error: unknown
   onClose: () => void
   onSubmit: (data: ActivityPhotoUpload | ActivityPhotoUpdate) => void
 }
 
-function PhotoMetadataDialog({ mode, open, photo, busy, error, onClose, onSubmit }: PhotoMetadataDialogProps) {
+function PhotoMetadataDialog({ mode, open, photo, busy, progress = 0, error, onClose, onSubmit }: PhotoMetadataDialogProps) {
   const [file, setFile] = useState<File | null>(null)
   const [caption, setCaption] = useState('')
   const [capturedAt, setCapturedAt] = useState('')
@@ -333,7 +337,7 @@ function PhotoMetadataDialog({ mode, open, photo, busy, error, onClose, onSubmit
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 3 }}>
         <Button color="inherit" onClick={onClose}>Abbrechen</Button>
-        <Button variant="contained" disabled={busy} onClick={submit}>{busy ? 'Wird gespeichert …' : mode === 'upload' ? 'Foto hochladen' : 'Speichern'}</Button>
+        <Button variant="contained" disabled={busy} onClick={submit}>{busy ? `${mode === 'upload' ? 'Wird hochgeladen' : 'Wird gespeichert'} … ${progress}%` : mode === 'upload' ? 'Foto hochladen' : 'Speichern'}</Button>
       </DialogActions>
     </Dialog>
   )

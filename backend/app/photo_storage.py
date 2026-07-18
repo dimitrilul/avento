@@ -39,6 +39,19 @@ class StoredPhoto:
 
 
 @dataclass(frozen=True)
+class OriginalPhoto:
+    path: Path
+    file_hash: str
+    size_bytes: int
+    width: int
+    height: int
+    content_type: str
+    captured_at: datetime | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+
+
+@dataclass(frozen=True)
 class StagedPhotoDeletion:
     original_path: Path
     staged_path: Path
@@ -63,6 +76,104 @@ def _server_generated_destination(upload_dir: Path, photo_id: str) -> Path:
     if not destination.is_relative_to(root):
         raise ValueError("Der Fotozielpfad liegt außerhalb des Uploadverzeichnisses.")
     return destination
+
+
+def _original_destination(upload_dir: Path, photo_id: str) -> Path:
+    try:
+        normalized_id = str(uuid.UUID(photo_id))
+    except (ValueError, AttributeError) as exc:
+        raise ValueError("Ungültige serverseitige Foto-ID.") from exc
+    root = _photo_root(upload_dir)
+    shard = normalized_id.replace("-", "")[:2]
+    destination = (root / shard / f"{normalized_id}.original").resolve()
+    if not destination.is_relative_to(root):
+        raise ValueError("Der Fotozielpfad liegt außerhalb des Uploadverzeichnisses.")
+    return destination
+
+
+def validate_and_store_original(
+    data: bytes,
+    photo_id: str,
+    upload_dir: Path,
+    assumed_timezone: tzinfo | None = None,
+) -> OriginalPhoto:
+    """Validate and persist the immutable source bytes without transcoding them."""
+    if not data:
+        raise PhotoValidationError("Die Bilddatei ist leer.")
+    if len(data) > MAX_PHOTO_BYTES:
+        raise PhotoValidationError("Das Aktivitätsfoto ist zu groß.")
+
+    digest = hashlib.sha256(data).hexdigest()
+    destination = _original_destination(upload_dir, photo_id)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(BytesIO(data)) as probe:
+                image_format = (probe.format or "").upper()
+                width, height = probe.size
+                if image_format not in ALLOWED_IMAGE_FORMATS:
+                    raise PhotoValidationError("Unterstützt werden JPEG-, PNG- und WebP-Bilder.")
+                if width <= 0 or height <= 0 or width * height > MAX_PHOTO_PIXELS:
+                    raise PhotoValidationError("Das Aktivitätsfoto hat unzulässige Abmessungen.")
+                if getattr(probe, "n_frames", 1) != 1:
+                    raise PhotoValidationError("Animierte Aktivitätsfotos werden nicht unterstützt.")
+                probe.verify()
+            with Image.open(BytesIO(data)) as source:
+                source.load()
+                captured_at, latitude, longitude = _exif_metadata(source, assumed_timezone)
+                content_type = Image.MIME.get((source.format or "").upper(), "application/octet-stream")
+        temporary = destination.parent / f".{uuid.uuid4()}.original.tmp"
+        temporary.write_bytes(data)
+        os.replace(temporary, destination)
+    except PhotoValidationError:
+        raise
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning, UnidentifiedImageError, OSError, ValueError) as exc:
+        raise PhotoValidationError("Die Datei ist kein gültiges, sicher lesbares Bild.") from exc
+
+    return OriginalPhoto(
+        path=destination,
+        file_hash=digest,
+        size_bytes=len(data),
+        width=width,
+        height=height,
+        content_type=content_type,
+        captured_at=captured_at,
+        latitude=latitude,
+        longitude=longitude,
+    )
+
+
+def create_optimized_photo(original_path: Path, photo_id: str, upload_dir: Path) -> StoredPhoto:
+    """Create the derived WebP while keeping the original untouched."""
+    data = original_path.read_bytes()
+    destination = _server_generated_destination(upload_dir, photo_id)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.parent / f".{uuid.uuid4()}.tmp"
+    try:
+        with Image.open(BytesIO(data)) as source:
+            source.load()
+            normalized = ImageOps.exif_transpose(source)
+            has_alpha = normalized.mode in {"RGBA", "LA"} or (
+                normalized.mode == "P" and "transparency" in normalized.info
+            )
+            output = normalized.convert("RGBA" if has_alpha else "RGB")
+            try:
+                width, height = output.size
+                output.save(temporary, format="WEBP", quality=86, method=4)
+            finally:
+                output.close()
+        os.replace(temporary, destination)
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning, UnidentifiedImageError, OSError, ValueError) as exc:
+        temporary.unlink(missing_ok=True)
+        raise PhotoValidationError("Die optimierte Bildvariante konnte nicht erstellt werden.") from exc
+    return StoredPhoto(
+        path=destination,
+        file_hash=hashlib.sha256(data).hexdigest(),
+        size_bytes=destination.stat().st_size,
+        width=width,
+        height=height,
+    )
 
 
 def safe_photo_path(stored_path: str | Path, upload_dir: Path, *, must_exist: bool = False) -> Path:
