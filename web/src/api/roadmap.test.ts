@@ -9,6 +9,7 @@ const photo: ActivityPhoto = {
   original_filename: 'passhöhe.jpg',
   content_type: 'image/webp',
   size_bytes: 1234,
+  original_size_bytes: 2345,
   width: 1200,
   height: 800,
   captured_at: '2026-07-10T08:30:00Z',
@@ -16,6 +17,8 @@ const photo: ActivityPhoto = {
   longitude: 11.2,
   caption: 'Passhöhe',
   file_url: '/api/v1/activities/ride-1/photos/photo-1/file',
+  original_file_url: '/api/v1/activities/ride-1/photos/photo-1/original',
+  processing_status: 'ready',
   created_at: '2026-07-10T09:00:00Z',
   updated_at: '2026-07-10T09:00:00Z',
 }

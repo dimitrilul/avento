@@ -260,6 +260,7 @@ class ActivityPhotoResponse(BaseModel):
     original_filename: str
     content_type: str
     size_bytes: int
+    original_size_bytes: int
     width: int
     height: int
     captured_at: datetime | None = None
@@ -267,6 +268,8 @@ class ActivityPhotoResponse(BaseModel):
     longitude: float | None = None
     caption: str | None = None
     file_url: str
+    original_file_url: str
+    processing_status: str
     created_at: datetime
     updated_at: datetime
 

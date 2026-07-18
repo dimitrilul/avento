@@ -135,4 +135,34 @@ export async function apiBlobRequest(path: string, options: RequestOptions = {})
   return response.blob()
 }
 
+export function apiUploadRequest<T>(
+  path: string,
+  body: FormData,
+  onProgress?: (percent: number) => void,
+): Promise<T> {
+  if (!onProgress) return apiRequest<T>(path, { method: 'POST', body })
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', requestUrl(path))
+    const tokens = tokenStore.get()
+    const target = requestUrl(path)
+    if (tokens?.access_token && isTrustedApiTarget(target)) {
+      xhr.setRequestHeader('Authorization', `Bearer ${tokens.access_token}`)
+    }
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100))
+    }
+    xhr.onerror = () => reject(new ApiError('Upload fehlgeschlagen', 0))
+    xhr.onload = () => {
+      let payload: unknown
+      try { payload = xhr.responseText ? JSON.parse(xhr.responseText) : undefined } catch { payload = undefined }
+      if (xhr.status >= 200 && xhr.status < 300) return resolve(payload as T)
+      const detail = (payload as ApiErrorBody | undefined)?.detail
+      const message = typeof detail === 'string' ? detail : `Upload fehlgeschlagen (${xhr.status})`
+      reject(new ApiError(message, xhr.status, payload as ApiErrorBody | undefined))
+    }
+    xhr.send(body)
+  })
+}
+
 export const apiUrl = API_URL

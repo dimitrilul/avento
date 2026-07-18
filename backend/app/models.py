@@ -212,7 +212,11 @@ class ActivityPhoto(Base):
         index=True,
     )
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    storage_path: Mapped[str] = mapped_column(String(1024), unique=True)
+    # The original is immutable and is never replaced by an optimized variant.
+    original_storage_path: Mapped[str] = mapped_column(String(1024), unique=True)
+    original_content_type: Mapped[str] = mapped_column(String(100))
+    original_size_bytes: Mapped[int] = mapped_column(Integer)
+    storage_path: Mapped[str | None] = mapped_column(String(1024), unique=True, nullable=True)
     original_filename: Mapped[str] = mapped_column(String(255))
     content_type: Mapped[str] = mapped_column(String(100))
     file_hash: Mapped[str] = mapped_column(String(64), index=True)
@@ -223,6 +227,7 @@ class ActivityPhoto(Base):
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     caption: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    processing_status: Mapped[str] = mapped_column(String(20), default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

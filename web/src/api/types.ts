@@ -351,9 +351,12 @@ export interface ActivityPhoto {
   original_filename: string
   content_type: string
   size_bytes: number
+  original_size_bytes: number
   width: number
   height: number
   file_url: string
+  original_file_url: string
+  processing_status: 'pending' | 'processing' | 'ready' | 'failed'
   created_at: string
   updated_at: string
 }
