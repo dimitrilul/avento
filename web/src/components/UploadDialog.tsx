@@ -25,7 +25,7 @@ import { activityTypes, errorMessage } from '../utils/format'
 
 export function UploadDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null)
-  const [file, setFile] = useState<File | null>(null)
+  const [files, setFiles] = useState<File[]>([])
   const [title, setTitle] = useState('')
   const [type, setType] = useState<ActivityType>('ride')
   const [dragActive, setDragActive] = useState(false)
@@ -33,27 +33,28 @@ export function UploadDialog({ open, onClose }: { open: boolean; onClose: () => 
   const navigate = useNavigate()
 
   const mutation = useMutation({
-    mutationFn: activitiesApi.import,
-    onSuccess: async (activity) => {
+    mutationFn: (selected: File[]) => activitiesApi.importBatch(selected),
+    onSuccess: async (batch) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['activities'] }),
         queryClient.invalidateQueries({ queryKey: ['statistics'] }),
       ])
       closeAndReset()
-      navigate(`/aktivitaeten/${activity.id}`)
+      const activityId = batch.jobs.length === 1 ? batch.jobs[0].activity_id : null
+      if (activityId) navigate(`/aktivitaeten/${activityId}`)
     },
   })
 
   function choose(next: File | undefined) {
     if (!next) return
-    setFile(next)
-    if (!title) setTitle(next.name.replace(/\.tcx$/i, '').replace(/[_-]+/g, ' '))
+    setFiles([next])
+    if (!title) setTitle(next.name.replace(/\.(tcx|fit|gpx)$/i, '').replace(/[_-]+/g, ' '))
     mutation.reset()
   }
 
   function closeAndReset() {
     if (mutation.isPending) return
-    setFile(null)
+    setFiles([])
     setTitle('')
     setType('ride')
     mutation.reset()
@@ -63,15 +64,16 @@ export function UploadDialog({ open, onClose }: { open: boolean; onClose: () => 
   return (
     <Dialog open={open} onClose={closeAndReset} fullWidth maxWidth="sm">
       {mutation.isPending && <LinearProgress />}
-      <DialogTitle sx={{ pb: 1 }}>TCX-Aktivität importieren</DialogTitle>
+          <DialogTitle sx={{ pb: 1 }}>Aktivitäten importieren</DialogTitle>
       <DialogContent>
         <Stack spacing={2.5} sx={{ pt: 1 }}>
           <input
             ref={inputRef}
             hidden
             type="file"
-            accept=".tcx,application/vnd.garmin.tcx+xml,application/xml,text/xml"
-            onChange={(event) => choose(event.target.files?.[0])}
+            multiple
+            accept=".tcx,.fit,.gpx,application/vnd.garmin.tcx+xml,application/octet-stream,application/gpx+xml,application/xml,text/xml"
+            onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
           />
           <Box
             role="button"
@@ -98,18 +100,18 @@ export function UploadDialog({ open, onClose }: { open: boolean; onClose: () => 
               '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' },
             }}
           >
-            {file ? (
+            {files.length ? (
               <Stack alignItems="center" spacing={1}>
                 <InsertDriveFileRoundedIcon color="primary" fontSize="large" />
-                <Typography fontWeight={750}>{file.name}</Typography>
+                <Typography fontWeight={750}>{files.length === 1 ? files[0].name : `${files.length} Dateien ausgewählt`}</Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {(file.size / 1024 / 1024).toLocaleString('de-DE', { maximumFractionDigits: 1 })} MB · Klicken zum Ersetzen
+                  {files.length === 1 ? `${(files[0].size / 1024 / 1024).toLocaleString('de-DE', { maximumFractionDigits: 1 })} MB` : 'TCX, FIT und GPX werden unterstützt'} · Klicken zum Ersetzen
                 </Typography>
               </Stack>
             ) : (
               <Stack alignItems="center" spacing={1}>
                 <CloudUploadRoundedIcon color="primary" fontSize="large" />
-                <Typography fontWeight={750}>TCX-Datei hier ablegen</Typography>
+                <Typography fontWeight={750}>TCX-, FIT- oder GPX-Dateien hier ablegen</Typography>
                 <Typography variant="body2" color="text.secondary">oder vom Gerät auswählen</Typography>
               </Stack>
             )}
@@ -135,7 +137,7 @@ export function UploadDialog({ open, onClose }: { open: boolean; onClose: () => 
           </FormControl>
           {mutation.isError && <Alert severity="error">{errorMessage(mutation.error)}</Alert>}
           <Typography variant="caption" color="text.secondary">
-            Die Datei wird verschlüsselt an deinen Avento-Server übertragen und dort analysiert.
+            Die Dateien werden übertragen und als idempotente Jobs verarbeitet. Fortschritt und Teilfehler bleiben pro Datei sichtbar.
           </Typography>
         </Stack>
       </DialogContent>
@@ -144,10 +146,10 @@ export function UploadDialog({ open, onClose }: { open: boolean; onClose: () => 
         <Button
           variant="contained"
           startIcon={<CloudUploadRoundedIcon />}
-          disabled={!file || mutation.isPending}
-          onClick={() => file && mutation.mutate({ file, title: title.trim() || undefined, type })}
+          disabled={!files.length || mutation.isPending}
+          onClick={() => files.length && mutation.mutate(files)}
         >
-          {mutation.isPending ? 'Wird analysiert …' : 'Importieren'}
+          {mutation.isPending ? 'Wird importiert …' : files.length > 1 ? `${files.length} Dateien importieren` : 'Importieren'}
         </Button>
       </DialogActions>
     </Dialog>

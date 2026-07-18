@@ -98,6 +98,8 @@ fun ActivitiesScreen(
                                 "application/xml",
                                 "text/xml",
                                 "application/octet-stream",
+                                "application/gpx+xml",
+                                "application/gpx",
                             ),
                         )
                     }) { Icon(Icons.Default.Add, "Aktivität importieren") }

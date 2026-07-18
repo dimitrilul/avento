@@ -193,6 +193,25 @@ class Activity(Base):
     )
 
 
+class ImportJob(Base):
+    """Durable per-file state shared by web and mobile imports."""
+    __tablename__ = "import_jobs"
+    __table_args__ = (UniqueConstraint("user_id", "file_hash", name="uq_import_job_user_hash"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4_str)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    file_hash: Mapped[str] = mapped_column(String(64), index=True)
+    original_filename: Mapped[str] = mapped_column(String(255))
+    file_path: Mapped[str] = mapped_column(String(1024))
+    status: Mapped[str] = mapped_column(String(30), default="queued", index=True)
+    steps: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    warnings: Mapped[list[str]] = mapped_column(JSON, default=list)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    activity_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 class ActivityPhoto(Base):
     __tablename__ = "activity_photos"
     __table_args__ = (

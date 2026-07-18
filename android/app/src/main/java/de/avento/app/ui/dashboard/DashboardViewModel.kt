@@ -9,7 +9,7 @@ import de.avento.app.data.model.Activity
 import de.avento.app.data.model.OverviewStatistics
 import de.avento.app.data.model.Profile
 import de.avento.app.util.displayName
-import de.avento.app.util.readTcx
+import de.avento.app.util.readActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -75,9 +75,9 @@ class DashboardViewModel(
             _state.update { it.copy(importing = true, error = null) }
             runCatching {
                 val (bytes, name) = withContext(Dispatchers.IO) {
-                    resolver.readTcx(uri) to (resolver.displayName(uri) ?: fallbackName ?: "aktivitaet.tcx")
+                    resolver.readActivity(uri) to (resolver.displayName(uri) ?: fallbackName ?: "aktivitaet.tcx")
                 }
-                require(name.lowercase().endsWith(".tcx")) { "Bitte wähle eine TCX-Datei aus." }
+                require(name.lowercase().endsWith(".tcx") || name.lowercase().endsWith(".fit") || name.lowercase().endsWith(".gpx")) { "Bitte wähle eine TCX-, FIT- oder GPX-Datei aus." }
                 repository.uploadTcx(bytes, name, title, type, notes)
             }.onSuccess { activity ->
                 _state.update {

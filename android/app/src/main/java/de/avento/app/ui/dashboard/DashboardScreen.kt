@@ -125,6 +125,8 @@ fun DashboardScreen(
                 "application/xml",
                 "text/xml",
                 "application/octet-stream",
+                "application/gpx+xml",
+                "application/gpx",
             ),
         )
     }

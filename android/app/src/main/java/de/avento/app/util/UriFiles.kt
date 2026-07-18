@@ -5,7 +5,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import java.io.ByteArrayOutputStream
 
-private const val MAX_TCX_BYTES = 50 * 1024 * 1024
+private const val MAX_ACTIVITY_BYTES = 50 * 1024 * 1024
 private const val MAX_PHOTO_BYTES = 20 * 1024 * 1024
 private const val MAX_AVATAR_BYTES = 10 * 1024 * 1024
 
@@ -21,8 +21,8 @@ fun ContentResolver.displayName(uri: Uri): String? = runCatching {
     }
 }.getOrNull()
 
-fun ContentResolver.readTcx(uri: Uri): ByteArray {
-    return readLimited(uri, MAX_TCX_BYTES, "Die TCX-Datei darf höchstens 50 MB groß sein.")
+fun ContentResolver.readActivity(uri: Uri): ByteArray {
+    return readLimited(uri, MAX_ACTIVITY_BYTES, "Die Aktivitätsdatei darf höchstens 50 MB groß sein.")
 }
 
 fun ContentResolver.readPhoto(uri: Uri): LocalFile = LocalFile(

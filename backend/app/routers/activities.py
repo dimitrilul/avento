@@ -6,10 +6,10 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, attributes
 from starlette.concurrency import run_in_threadpool
 
 from ..ai import (
@@ -29,9 +29,9 @@ from ..analysis import (
 )
 from ..activity_geography import refresh_activity_geography
 from ..config import get_settings
-from ..database import get_db
+from ..database import SessionLocal, get_db
 from ..deps import get_current_user
-from ..models import Activity, ActivityPhoto, User, utcnow
+from ..models import Activity, ActivityPhoto, ImportJob, User, utcnow
 from ..photo_storage import (
     finalize_staged_photo_deletions,
     restore_staged_photo_deletions,
@@ -49,7 +49,8 @@ from ..schemas import (
     WeatherResponse,
 )
 from ..statistics import build_statistics
-from ..tcx import ParsedActivity, TcxError, parse_tcx
+from ..activity_formats import parse_activity
+from ..tcx import ParsedActivity, TcxError
 from ..weather import get_weather_provider
 from ..weather_classification import classify_route_weather
 
@@ -201,6 +202,145 @@ def _apply_analysis(activity: Activity, parsed: ParsedActivity) -> None:
     _invalidate_summary(activity)
 
 
+def _job_response(job: ImportJob) -> dict[str, Any]:
+    return {
+        "id": job.id,
+        "filename": job.original_filename,
+        "hash": job.file_hash,
+        "status": job.status,
+        "preview": (job.steps or {}).get("preview"),
+        "steps": job.steps or {},
+        "warnings": job.warnings or [],
+        "error": job.error,
+        "activity_id": job.activity_id,
+        "created_at": job.created_at,
+        "updated_at": job.updated_at,
+    }
+
+
+def _process_import_job(job_id: str) -> None:
+    with SessionLocal() as db:
+        job = db.get(ImportJob, job_id)
+        if job is None:
+            return
+        user = db.get(User, job.user_id)
+        if user is None:
+            return
+        job.status = "processing"
+        job.steps = {"upload": "completed", "parsing": "running", "weather": "queued", "geography": "queued", "gamification": "queued"}
+        db.commit()
+        try:
+            data = Path(job.file_path).read_bytes()
+            parsed = parse_activity(data, job.original_filename, user.hr_zones or [], user.hr_max)
+            job.steps["parsing"] = "completed"
+            attributes.flag_modified(job, "steps")
+            activity = Activity(
+                user_id=user.id, file_hash=job.file_hash, original_filename=job.original_filename,
+                original_file_path=job.file_path, title=f"Radfahrt am {parsed.started_at:%d.%m.%Y}",
+                activity_type=parsed.activity_type, started_at=parsed.started_at, ended_at=parsed.ended_at,
+            )
+            _apply_analysis(activity, parsed)
+            db.add(activity)
+            db.flush()
+            job.activity_id = activity.id
+            job.steps["weather"] = "running"
+            attributes.flag_modified(job, "steps")
+            db.commit()
+            try:
+                _refresh_weather(activity)
+                job.steps["weather"] = "completed" if activity.weather else "unavailable"
+                attributes.flag_modified(job, "steps")
+            except Exception as exc:
+                job.warnings.append(f"Wetter: {exc}")
+                job.steps["weather"] = "warning"
+                attributes.flag_modified(job, "warnings")
+                attributes.flag_modified(job, "steps")
+            job.steps["geography"] = "running"
+            attributes.flag_modified(job, "steps")
+            db.commit()
+            try:
+                refresh_activity_geography(db, activity, get_settings())
+                job.steps["geography"] = "completed"
+            except Exception as exc:
+                job.warnings.append(f"Geocoding: {exc}")
+                job.steps["geography"] = "warning"
+                attributes.flag_modified(job, "warnings")
+                attributes.flag_modified(job, "steps")
+            job.steps["gamification"] = "completed"
+            attributes.flag_modified(job, "steps")
+            _invalidate_later_summaries(db, activity)
+            job.status = "completed_with_warnings" if job.warnings else "completed"
+            db.commit()
+        except (TcxError, OSError, IntegrityError) as exc:
+            db.rollback()
+            job = db.get(ImportJob, job_id)
+            if job:
+                job.status = "failed"
+                job.error = str(exc) or "Die Datei konnte nicht verarbeitet werden."
+                job.steps = {**(job.steps or {}), "parsing": "failed"}
+                db.commit()
+
+
+@router.post("/activities/imports", status_code=status.HTTP_202_ACCEPTED)
+async def import_activities(
+    background_tasks: BackgroundTasks,
+    files: list[UploadFile] = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Queue a batch and return a preview immediately; every file is idempotent."""
+    settings = get_settings()
+    if not files:
+        raise HTTPException(status_code=422, detail="Mindestens eine Datei ist erforderlich.")
+    jobs: list[ImportJob] = []
+    seen_hashes: set[str] = set()
+    for file in files:
+        data = await file.read(settings.max_upload_bytes + 1)
+        await file.close()
+        filename = (Path(file.filename or "activity.tcx").name or "activity.tcx")[:255]
+        if len(data) > settings.max_upload_bytes:
+            jobs.append(ImportJob(user_id=current_user.id, file_hash=hashlib.sha256(data).hexdigest(), original_filename=filename, file_path="", status="failed", error="Die Aktivitätsdatei ist zu groß."))
+            continue
+        digest = hashlib.sha256(data).hexdigest()
+        if digest in seen_hashes:
+            jobs.append(ImportJob(user_id=current_user.id, file_hash=digest, original_filename=filename, file_path="", status="duplicate", error="Diese Datei ist im Batch doppelt enthalten."))
+            continue
+        seen_hashes.add(digest)
+        existing_job = db.scalar(select(ImportJob).where(ImportJob.user_id == current_user.id, ImportJob.file_hash == digest))
+        if existing_job:
+            jobs.append(existing_job)
+            continue
+        existing = db.scalar(select(Activity).where(Activity.user_id == current_user.id, Activity.file_hash == digest))
+        if existing:
+            jobs.append(ImportJob(user_id=current_user.id, file_hash=digest, original_filename=filename, file_path="", status="duplicate", activity_id=existing.id, error="Diese Datei wurde bereits importiert."))
+            continue
+        directory = settings.upload_dir / current_user.id
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / f"{digest}{Path(filename).suffix.lower() or '.tcx'}"
+        path.write_bytes(data)
+        preview: dict[str, Any] | None = None
+        try:
+            parsed = parse_activity(data, filename, current_user.hr_zones or [], current_user.hr_max)
+            preview = {"time": parsed.started_at.isoformat(), "distance_m": parsed.distance_m, "duplicate": False}
+        except TcxError as exc:
+            preview = {"error": str(exc), "duplicate": False}
+        job = ImportJob(user_id=current_user.id, file_hash=digest, original_filename=filename, file_path=str(path), steps={"upload": "completed", "preview": preview})
+        db.add(job)
+        db.flush()
+        jobs.append(job)
+        background_tasks.add_task(_process_import_job, job.id)
+    db.commit()
+    return {"jobs": [_job_response(job) for job in jobs], "total": len(jobs)}
+
+
+@router.get("/activities/imports/{job_id}")
+def import_status(job_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    job = db.scalar(select(ImportJob).where(ImportJob.id == job_id, ImportJob.user_id == current_user.id))
+    if job is None:
+        raise HTTPException(status_code=404, detail="Importauftrag nicht gefunden.")
+    return _job_response(job)
+
+
 @router.post("/activities", response_model=ActivityResponse, status_code=status.HTTP_201_CREATED)
 async def upload_activity(
     file: UploadFile = File(...),
@@ -217,7 +357,7 @@ async def upload_activity(
     if not data:
         raise HTTPException(status_code=400, detail="Die hochgeladene Datei ist leer.")
     if len(data) > settings.max_upload_bytes:
-        raise HTTPException(status_code=413, detail="Die TCX-Datei ist zu groß.")
+        raise HTTPException(status_code=413, detail="Die Aktivitätsdatei ist zu groß.")
     digest = hashlib.sha256(data).hexdigest()
     duplicate = db.scalar(select(Activity).where(Activity.user_id == current_user.id, Activity.file_hash == digest))
     if duplicate:
@@ -226,14 +366,15 @@ async def upload_activity(
             detail={"message": "Diese TCX-Datei wurde bereits importiert.", "activity_id": duplicate.id},
         )
     try:
-        parsed = parse_tcx(data, current_user.hr_zones or [], current_user.hr_max)
+        parsed = parse_activity(data, file.filename or "activity.tcx", current_user.hr_zones or [], current_user.hr_max)
     except TcxError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     original_filename = (Path(file.filename or "activity.tcx").name or "activity.tcx")[:255]
     upload_directory = settings.upload_dir / current_user.id
     upload_directory.mkdir(parents=True, exist_ok=True)
-    destination = upload_directory / f"{digest}.tcx"
+    suffix = Path(original_filename).suffix.lower() or ".tcx"
+    destination = upload_directory / f"{digest}{suffix}"
     destination.write_bytes(data)
     activity = Activity(
         user_id=current_user.id,
@@ -254,7 +395,7 @@ async def upload_activity(
     except IntegrityError:
         db.rollback()
         destination.unlink(missing_ok=True)
-        raise HTTPException(status_code=409, detail="Diese TCX-Datei wurde bereits importiert.") from None
+        raise HTTPException(status_code=409, detail="Diese Datei wurde bereits importiert.") from None
     await run_in_threadpool(_refresh_weather, activity)
     await run_in_threadpool(refresh_activity_geography, db, activity, settings)
     _invalidate_later_summaries(db, activity)
@@ -263,7 +404,7 @@ async def upload_activity(
     except IntegrityError:
         db.rollback()
         destination.unlink(missing_ok=True)
-        raise HTTPException(status_code=409, detail="Diese TCX-Datei wurde bereits importiert.") from None
+        raise HTTPException(status_code=409, detail="Diese Datei wurde bereits importiert.") from None
     db.refresh(activity)
     return _activity_response(activity)
 
@@ -389,7 +530,7 @@ def reanalyze_activity(
     except OSError as exc:
         raise HTTPException(status_code=409, detail="Die ursprüngliche TCX-Datei ist nicht mehr verfügbar.") from exc
     try:
-        parsed = parse_tcx(data, current_user.hr_zones or [], current_user.hr_max)
+        parsed = parse_activity(data, activity.original_filename, current_user.hr_zones or [], current_user.hr_max)
     except TcxError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     _apply_analysis(activity, parsed)

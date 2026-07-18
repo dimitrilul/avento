@@ -212,11 +212,16 @@ class DefaultAventoRepository(
         notes: String?,
         hydrationMilliliters: Int?,
     ): Activity {
-        require(bytes.isNotEmpty()) { "Die TCX-Datei ist leer." }
+        require(bytes.isNotEmpty()) { "Die Aktivitätsdatei ist leer." }
         require(hydrationMilliliters == null || hydrationMilliliters in 0..20_000) {
             "Die Trinkmenge muss zwischen 0 und 20.000 ml liegen."
         }
-        val file = MultipartBody.Part.createFormData("file", fileName, bytes.toRequestBody(TCX_MEDIA_TYPE))
+        val mediaType = when (fileName.substringAfterLast('.', "").lowercase()) {
+            "fit" -> FIT_MEDIA_TYPE
+            "gpx" -> GPX_MEDIA_TYPE
+            else -> TCX_MEDIA_TYPE
+        }
+        val file = MultipartBody.Part.createFormData("file", fileName, bytes.toRequestBody(mediaType))
         return api.uploadActivity(
             file = file,
             title = title.partOrNull(TEXT_MEDIA_TYPE),
@@ -375,6 +380,8 @@ class DefaultAventoRepository(
 
     private companion object {
         val TCX_MEDIA_TYPE = "application/vnd.garmin.tcx+xml".toMediaType()
+        val FIT_MEDIA_TYPE = "application/octet-stream".toMediaType()
+        val GPX_MEDIA_TYPE = "application/gpx+xml".toMediaType()
         val TEXT_MEDIA_TYPE = "text/plain".toMediaType()
         val IMAGE_MEDIA_TYPE = "image/jpeg".toMediaType()
         const val MAX_IN_MEMORY_PHOTO_BYTES = 20 * 1024 * 1024

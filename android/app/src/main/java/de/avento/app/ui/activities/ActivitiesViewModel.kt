@@ -8,7 +8,7 @@ import de.avento.app.data.AventoRepository
 import de.avento.app.data.model.Activity
 import de.avento.app.data.model.ActivityFilters
 import de.avento.app.util.displayName
-import de.avento.app.util.readTcx
+import de.avento.app.util.readActivity
 import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -99,9 +99,9 @@ class ActivitiesViewModel(
                 val hydrationMl = hydration?.trim()?.takeIf(String::isNotEmpty)?.toIntOrNull()
                 require(hydration.isNullOrBlank() || hydrationMl != null) { "Die Trinkmenge muss eine ganze Zahl sein." }
                 val (bytes, name) = withContext(Dispatchers.IO) {
-                    resolver.readTcx(uri) to (resolver.displayName(uri) ?: "aktivitaet.tcx")
+                    resolver.readActivity(uri) to (resolver.displayName(uri) ?: "aktivitaet.tcx")
                 }
-                require(name.lowercase().endsWith(".tcx")) { "Bitte wähle eine TCX-Datei aus." }
+                require(name.lowercase().endsWith(".tcx") || name.lowercase().endsWith(".fit") || name.lowercase().endsWith(".gpx")) { "Bitte wähle eine TCX-, FIT- oder GPX-Datei aus." }
                 repository.uploadTcx(bytes, name, title, type, notes, hydrationMl)
             }.onSuccess { activity ->
                 _state.update { it.copy(importing = false, message = "${activity.title ?: "Aktivität"} wurde importiert.") }

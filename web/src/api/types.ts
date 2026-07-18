@@ -183,6 +183,24 @@ export interface ImportActivityData extends ActivityUpdate {
   file: File
 }
 
+export interface ImportJob {
+  id: string
+  filename: string
+  hash: string
+  status: string
+  steps: Record<string, string>
+  warnings: string[]
+  error: string | null
+  activity_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ImportBatchResponse {
+  jobs: ImportJob[]
+  total: number
+}
+
 export interface StatisticsTotals {
   activities: number
   distance_m: number

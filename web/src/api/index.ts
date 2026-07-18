@@ -9,6 +9,8 @@ import type {
   ChatHistoryItem,
   ChatResponse,
   ImportActivityData,
+  ImportBatchResponse,
+  ImportJob,
   InvitationResponse,
   PasswordResetResponse,
   PaginatedActivities,
@@ -142,6 +144,12 @@ export const activitiesApi = {
     if (data.notes) form.set('notes', data.notes)
     return apiRequest<Activity>('/activities', { method: 'POST', body: form })
   },
+  importBatch: (files: File[]) => {
+    const form = new FormData()
+    files.forEach((file) => form.append('files', file))
+    return apiRequest<ImportBatchResponse>('/activities/imports', { method: 'POST', body: form })
+  },
+  importStatus: (jobId: string) => apiRequest<ImportJob>(`/activities/imports/${jobId}`),
   update: (id: string, data: ActivityUpdate) =>
     apiRequest<ActivityDetail>(`/activities/${id}`, { method: 'PATCH', body: data }),
   reanalyze: (id: string) =>
