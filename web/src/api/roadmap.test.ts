@@ -31,7 +31,7 @@ afterEach(() => tokenStore.clear())
 
 describe('Roadmap-API-Verträge', () => {
   it('sendet Foto und Metadaten an den Aktivitätsfoto-Endpunkt', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(photo))
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => jsonResponse(photo))
     const file = new File(['bild'], 'passhöhe.jpg', { type: 'image/jpeg' })
 
     await activityPhotosApi.upload('ride-1', {
@@ -52,6 +52,19 @@ describe('Roadmap-API-Verträge', () => {
     expect(body.get('captured_at')).toBe('2026-07-10T08:30:00.000Z')
     expect(body.get('latitude')).toBe('47.1')
     expect(body.get('client_timezone')).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone)
+  })
+
+  it('kann mehrere Fotos als getrennte Uploads mit eigenem Fortschritt senden', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => jsonResponse(photo))
+    const files = [
+      new File(['erstes bild'], 'erstes.jpg', { type: 'image/jpeg' }),
+      new File(['zweites bild'], 'zweites.png', { type: 'image/png' }),
+    ]
+
+    await Promise.all(files.map((file) => activityPhotosApi.upload('ride-1', { file })))
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls.map(([, init]) => (init?.body as FormData).get('file'))).toEqual(files)
   })
 
   it('lädt file_url mit dem angemeldeten Zugriffstoken', async () => {

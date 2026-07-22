@@ -4,6 +4,7 @@ import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded'
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded'
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
 import EditRoundedIcon from '@mui/icons-material/EditRounded'
+import CloudUploadRoundedIcon from '@mui/icons-material/CloudUploadRounded'
 import ImageNotSupportedRoundedIcon from '@mui/icons-material/ImageNotSupportedRounded'
 import LocationOnRoundedIcon from '@mui/icons-material/LocationOnRounded'
 import PhotoLibraryRoundedIcon from '@mui/icons-material/PhotoLibraryRounded'
@@ -17,7 +18,12 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   IconButton,
+  LinearProgress,
+  List,
+  ListItem,
+  ListItemText,
   Skeleton,
   Stack,
   TextField,
@@ -55,6 +61,7 @@ export function capturedAtForApi(value: string) {
 export function ActivityPhotoGallery({ activityId, trackPoints, mapVariant = 'classic' }: { activityId: string; trackPoints: TrackPoint[]; mapVariant?: 'classic' | 'minimal' }) {
   const client = useQueryClient()
   const [uploadOpen, setUploadOpen] = useState(false)
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false)
   const [editPhoto, setEditPhoto] = useState<ActivityPhoto | null>(null)
   const [deletePhoto, setDeletePhoto] = useState<ActivityPhoto | null>(null)
   const [detailPhoto, setDetailPhoto] = useState<ActivityPhoto | null>(null)
@@ -113,9 +120,14 @@ export function ActivityPhotoGallery({ activityId, trackPoints, mapVariant = 'cl
             {photos.data ? `${photos.data.total} ${photos.data.total === 1 ? 'Erinnerung' : 'Erinnerungen'} zu dieser Fahrt` : 'Momente entlang deiner Strecke'}
           </Typography>
         </Box>
-        <Button variant="outlined" startIcon={<AddAPhotoRoundedIcon />} onClick={() => { upload.reset(); setUploadOpen(true) }}>
-          Foto hinzufügen
-        </Button>
+        <Stack direction={{ xs: 'column', sm: 'row' }} gap={1}>
+          <Button variant="outlined" startIcon={<AddAPhotoRoundedIcon />} onClick={() => { upload.reset(); setUploadOpen(true) }}>
+            Foto hinzufügen
+          </Button>
+          <Button variant="contained" startIcon={<CloudUploadRoundedIcon />} onClick={() => setBulkUploadOpen(true)}>
+            Mehrere Fotos
+          </Button>
+        </Stack>
       </Stack>
 
       {photos.isError && <ErrorState error={photos.error} onRetry={() => void photos.refetch()} />}
@@ -170,6 +182,14 @@ export function ActivityPhotoGallery({ activityId, trackPoints, mapVariant = 'cl
         error={upload.error}
         onClose={() => setUploadOpen(false)}
         onSubmit={(data) => upload.mutate(data as ActivityPhotoUpload)}
+      />
+      <BulkPhotoUploadDialog
+        activityId={activityId}
+        open={bulkUploadOpen}
+        onClose={() => setBulkUploadOpen(false)}
+        onFinished={async () => {
+          await refresh()
+        }}
       />
       <PhotoMetadataDialog
         mode="edit"
@@ -338,6 +358,195 @@ function PhotoMetadataDialog({ mode, open, photo, busy, progress = 0, error, onC
       <DialogActions sx={{ px: 3, pb: 3 }}>
         <Button color="inherit" onClick={onClose}>Abbrechen</Button>
         <Button variant="contained" disabled={busy} onClick={submit}>{busy ? `${mode === 'upload' ? 'Wird hochgeladen' : 'Wird gespeichert'} … ${progress}%` : mode === 'upload' ? 'Foto hochladen' : 'Speichern'}</Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+type BulkPhotoStatus = 'pending' | 'uploading' | 'success' | 'error'
+
+interface BulkPhotoFile {
+  id: string
+  file: File
+  status: BulkPhotoStatus
+  progress: number
+  error: string | null
+  retryable: boolean
+}
+
+const bulkPhotoTypes = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const bulkPhotoExtensions = /\.(jpe?g|png|webp)$/i
+
+function bulkPhotoValidation(file: File) {
+  if ((!file.type || !bulkPhotoTypes.has(file.type)) && !bulkPhotoExtensions.test(file.name)) {
+    return 'Unterstützt werden JPEG-, PNG- und WebP-Bilder.'
+  }
+  if (file.size > maximumPhotoBytes) return 'Das Foto darf höchstens 15 MB groß sein.'
+  if (file.size === 0) return 'Die Datei ist leer.'
+  return null
+}
+
+function BulkPhotoUploadDialog({
+  activityId,
+  open,
+  onClose,
+  onFinished,
+}: {
+  activityId: string
+  open: boolean
+  onClose: () => void
+  onFinished: () => Promise<void>
+}) {
+  const [items, setItems] = useState<BulkPhotoFile[]>([])
+  const [dragActive, setDragActive] = useState(false)
+  const [running, setRunning] = useState(false)
+  const [validation, setValidation] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open) {
+      setItems([])
+      setDragActive(false)
+      setRunning(false)
+      setValidation(null)
+    }
+  }, [open])
+
+  function addFiles(selected: File[]) {
+    setValidation(null)
+    const existing = new Set(items.map((item) => `${item.file.name}:${item.file.size}:${item.file.lastModified}`))
+    const next = selected.map((file, index) => {
+      const key = `${file.name}:${file.size}:${file.lastModified}`
+      const error = bulkPhotoValidation(file)
+      return {
+        id: `${key}:${index}`,
+        file,
+        status: error ? 'error' as const : 'pending' as const,
+        progress: 0,
+        error,
+        retryable: !error,
+      }
+    }).filter((item) => {
+      const key = `${item.file.name}:${item.file.size}:${item.file.lastModified}`
+      if (existing.has(key)) return false
+      existing.add(key)
+      return true
+    })
+    setItems((current) => [...current, ...next])
+  }
+
+  function removeItem(id: string) {
+    if (running) return
+    setItems((current) => current.filter((item) => item.id !== id))
+  }
+
+  async function uploadItems(ids: string[]) {
+    if (running || ids.length === 0) return
+    setRunning(true)
+    const queue = [...ids]
+    const worker = async () => {
+      while (queue.length > 0) {
+        const id = queue.shift()
+        if (!id) return
+        const item = items.find((candidate) => candidate.id === id)
+        if (!item) continue
+        setItems((current) => current.map((candidate) => candidate.id === id
+          ? { ...candidate, status: 'uploading', progress: 0, error: null }
+          : candidate))
+        try {
+          await activityPhotosApi.upload(activityId, { file: item.file }, (progress) => {
+            setItems((current) => current.map((candidate) => candidate.id === id ? { ...candidate, progress } : candidate))
+          })
+          setItems((current) => current.map((candidate) => candidate.id === id
+            ? { ...candidate, status: 'success', progress: 100, error: null }
+            : candidate))
+        } catch (error) {
+          setItems((current) => current.map((candidate) => candidate.id === id
+          ? { ...candidate, status: 'error', error: errorMessage(error) }
+            : candidate))
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(3, ids.length) }, () => worker()))
+    setRunning(false)
+    await onFinished()
+  }
+
+  const pendingIds = items.filter((item) => item.status === 'pending').map((item) => item.id)
+  const failedIds = items.filter((item) => item.status === 'error' && item.retryable).map((item) => item.id)
+  const completed = items.filter((item) => item.status === 'success').length
+  const totalProgress = items.length === 0
+    ? 0
+    : Math.round(items.reduce((sum, item) => sum + item.progress, 0) / items.length)
+
+  return (
+    <Dialog open={open} onClose={running ? undefined : onClose} fullWidth maxWidth="sm">
+      {running && <LinearProgress variant="determinate" value={totalProgress} />}
+      <DialogTitle>Mehrere Fotos hinzufügen</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          <Box
+            component="label"
+            role="button"
+            tabIndex={0}
+            onDragEnter={(event) => { event.preventDefault(); setDragActive(true) }}
+            onDragOver={(event) => event.preventDefault()}
+            onDragLeave={(event) => { event.preventDefault(); setDragActive(false) }}
+            onDrop={(event) => { event.preventDefault(); setDragActive(false); addFiles(Array.from(event.dataTransfer.files)) }}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minHeight: 130,
+              p: 3,
+              textAlign: 'center',
+              border: '2px dashed',
+              borderColor: dragActive ? 'primary.main' : 'divider',
+              borderRadius: 2,
+              bgcolor: dragActive ? 'action.selected' : 'action.hover',
+              cursor: running ? 'default' : 'pointer',
+            }}
+          >
+            <Stack alignItems="center" spacing={.75}>
+              <CloudUploadRoundedIcon color="primary" fontSize="large" />
+              <Typography fontWeight={700}>Bilder hierher ziehen</Typography>
+              <Typography variant="body2" color="text.secondary">oder mehrere JPEG-, PNG- und WebP-Dateien auswählen</Typography>
+            </Stack>
+            <Box component="input" hidden type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={running} onChange={(event: React.ChangeEvent<HTMLInputElement>) => addFiles(Array.from(event.target.files ?? []))} />
+          </Box>
+
+          {validation && <Alert severity="error">{validation}</Alert>}
+          {items.length > 0 && (
+            <>
+              <Stack direction="row" justifyContent="space-between" alignItems="center">
+                <Typography fontWeight={700}>{completed} von {items.length} Fotos hochgeladen</Typography>
+                <Typography variant="body2" color="text.secondary">{totalProgress}%</Typography>
+              </Stack>
+              <LinearProgress variant="determinate" value={totalProgress} />
+              <Divider />
+              <List disablePadding>
+                {items.map((item) => (
+                  <ListItem key={item.id} disableGutters secondaryAction={
+                    !running && <Button size="small" onClick={() => item.status === 'error' && item.retryable ? void uploadItems([item.id]) : removeItem(item.id)}>
+                      {item.status === 'error' && item.retryable ? 'Erneut versuchen' : 'Entfernen'}
+                    </Button>
+                  }>
+                    <ListItemText
+                      primary={item.file.name}
+                      secondary={item.error ?? (item.status === 'uploading' ? `Wird hochgeladen … ${item.progress}%` : item.status === 'success' ? 'Erfolgreich hochgeladen' : `${Math.ceil(item.file.size / 1024)} KB`)}
+                      secondaryTypographyProps={{ color: item.status === 'error' ? 'error' : item.status === 'success' ? 'success.main' : 'text.secondary' }}
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </>
+          )}
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 3 }}>
+        <Button color="inherit" onClick={onClose} disabled={running}>Schließen</Button>
+        <Button variant="contained" disabled={running || pendingIds.length === 0} onClick={() => void uploadItems(pendingIds)}>
+          {running ? `Wird hochgeladen … ${totalProgress}%` : pendingIds.length > 0 ? `${pendingIds.length} Fotos hochladen` : failedIds.length > 0 ? 'Fehlgeschlagene Fotos erneut versuchen' : 'Fertig'}
+        </Button>
       </DialogActions>
     </Dialog>
   )
